@@ -33,6 +33,7 @@ async function analyzeAudioBeats(audioUrl, durationSec, token, options) {
     // 用 OfflineAudioContext 分离低频重鼓 / 中频鼓身 / 高频敲击感.
     var sr = buffer.sampleRate;
     async function renderBand(hpFreq, lpFreq) {
+      if (token !== beatMapToken) return null;
       var off = new TmpCtx(1, buffer.length, sr);
       var src = off.createBufferSource(); src.buffer = buffer;
       var node = src;
@@ -54,24 +55,20 @@ async function analyzeAudioBeats(audioUrl, durationSec, token, options) {
       }
       node.connect(off.destination);
       src.start(0);
-      var renderedBand = await off.startRendering();
-      if (token !== beatMapToken) return null;
-      await yieldToIdle(beatAnalysisYieldMs(options, 110, 620));
-      return renderedBand.getChannelData(0);
+      try {
+        var renderedBand = await off.startRendering();
+        if (token !== beatMapToken) return null;
+        await yieldToIdle(beatAnalysisYieldMs(options, 110, 620));
+        if (token !== beatMapToken) return null;
+        // Reduce this band before rendering the next one. Keeping all four
+        // full-song PCM arrays alive multiplies peak memory during playback.
+        return await makeFrameEnergy(renderedBand.getChannelData(0));
+      } finally {
+        src.disconnect();
+        src.buffer = null;
+        node.disconnect();
+      }
     }
-    var bands = [];
-    bands.push(await renderBand(38, 155));
-    if (token !== beatMapToken || !bands[0]) { hideBeatChip(); return null; }
-    bands.push(await renderBand(130, 420));
-    if (token !== beatMapToken || !bands[1]) { hideBeatChip(); return null; }
-    bands.push(await renderBand(420, 2600));
-    if (token !== beatMapToken || !bands[2]) { hideBeatChip(); return null; }
-    bands.push(await renderBand(1800, 9000));
-    if (token !== beatMapToken) { hideBeatChip(); return null; }
-    var lowPcm = bands[0];
-    var bodyPcm = bands[1];
-    var vocalPcm = bands[2];
-    var snapPcm = bands[3];
 
     // 帧化能量 (10ms 窗口)
     var winSize = Math.floor(sr * 0.010);
@@ -94,13 +91,16 @@ async function analyzeAudioBeats(audioUrl, durationSec, token, options) {
       return out;
     }
     var frameBands = [];
-    frameBands.push(await makeFrameEnergy(lowPcm));
+    frameBands.push(await renderBand(38, 155));
+    if (token !== beatMapToken || !frameBands[0]) { hideBeatChip(); return null; }
     await yieldToIdle(beatAnalysisYieldMs(options, 90, 520));
-    frameBands.push(await makeFrameEnergy(bodyPcm));
+    frameBands.push(await renderBand(130, 420));
+    if (token !== beatMapToken || !frameBands[1]) { hideBeatChip(); return null; }
     await yieldToIdle(beatAnalysisYieldMs(options, 90, 520));
-    frameBands.push(await makeFrameEnergy(vocalPcm));
+    frameBands.push(await renderBand(420, 2600));
+    if (token !== beatMapToken || !frameBands[2]) { hideBeatChip(); return null; }
     await yieldToIdle(beatAnalysisYieldMs(options, 90, 520));
-    frameBands.push(await makeFrameEnergy(snapPcm));
+    frameBands.push(await renderBand(1800, 9000));
     if (token !== beatMapToken || !frameBands[0] || !frameBands[1] || !frameBands[2] || !frameBands[3]) { hideBeatChip(); return null; }
     var energy = frameBands[0];
     var bodyEnergy = frameBands[1];
