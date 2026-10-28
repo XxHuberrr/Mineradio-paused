@@ -1183,13 +1183,20 @@ function stopWallpaperEngineRuntimeForRenderer(reason = '') {
   return wallpaperEngineRuntime.stop().catch((error) => {
     console.warn('[Wallpaper Engine] renderer cleanup failed:', reason || 'renderer-reset', error && error.message || error);
     return { ok: false, stopped: false, error: String(error && (error.message || error.name) || error || 'WALLPAPER_ENGINE_STOP_FAILED') };
-  });
+  }).finally(() => sendWindowState(mainWindow));
 }
 
 function setMainWindowBackgroundThrottling(win, enabled) {
   if (!win || win.isDestroyed() || !win.webContents || win.webContents.isDestroyed()) return;
   try {
-    win.webContents.setBackgroundThrottling(enabled === true);
+    const wallpaper = wallpaperEngineRuntime.getStatus();
+    // Native DWM backgrounds can leave Chromium's occlusion state stale while the lyrics window is visible.
+    const visibleNativeWallpaper = win.isVisible() && !win.isMinimized()
+      && wallpaper.active === true && wallpaper.captureMode === 'dwm-thumbnail';
+    const throttled = enabled === true && !visibleNativeWallpaper;
+    if (win.webContents.getBackgroundThrottling() !== throttled) {
+      win.webContents.setBackgroundThrottling(throttled);
+    }
   } catch (_) { }
 }
 
@@ -1763,8 +1770,11 @@ function configureLocalAppPermissions() {
 }
 
 function sendWindowState(win) {
-  if (!win || win.isDestroyed()) return;
-  win.webContents.send('desktop-window-state', getWindowState(win));
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  const state = getWindowState(win);
+  setMainWindowBackgroundThrottling(win, state.isDesktopEmbedded || wallpaperEngineHostVisibilityResumePending
+    ? false : MAIN_WINDOW_BACKGROUND_THROTTLING);
+  win.webContents.send('desktop-window-state', state);
 }
 
 function sendGlobalHotkeyAction(action) {
@@ -4397,6 +4407,7 @@ ipcMain.handle('mineradio-wallpaper-engine-capture-result', async (event, payloa
     }, 90);
   }
   if (matched && confirmed) {
+    sendWindowState(mainWindow);
     syncWallpaperEngineDesktopIconLayering('wallpaper-engine-capture-ready').catch(() => {});
   }
   return {
@@ -4554,6 +4565,7 @@ ipcMain.handle('mineradio-wallpaper-engine-stop-scene', async (event, payload = 
     if (!stopAll && (!current.active || (wallpaperEngineCaptureGrant && wallpaperEngineCaptureGrant.sessionId === sessionId))) {
       clearWallpaperEngineCaptureGrant(sessionId);
     }
+    sendWindowState(mainWindow);
     return result;
   } catch (error) {
     return { ok: false, error: error.code || error.message || 'WALLPAPER_ENGINE_SCENE_STOP_FAILED' };
