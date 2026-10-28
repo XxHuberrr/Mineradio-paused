@@ -195,6 +195,21 @@ function runWallpaperEngineWin10YellowBorderRegressionCheck() {
   process.stdout.write(result.stdout || '');
 }
 
+function runWallpaperEngineRenderVisibilityRegressionCheck() {
+  logStep('Wallpaper Engine render visibility regression');
+  const testFile = path.join(appRoot, 'tests', 'wallpaper-engine-render-visibility.test.js');
+  const result = spawnSync(process.execPath, [testFile], {
+    cwd: appRoot,
+    encoding: 'utf8'
+  });
+  if (result.status !== 0) {
+    process.stdout.write(result.stdout || '');
+    process.stderr.write(result.stderr || '');
+    fail(`Wallpaper Engine render visibility regression failed: ${rel(testFile)}`);
+  }
+  process.stdout.write(result.stdout || '');
+}
+
 function runGestureCameraPermissionRegressionCheck() {
   logStep('Gesture camera permission regression');
   const testFile = path.join(appRoot, 'tests', 'gesture-camera-permission.test.js');
@@ -5633,6 +5648,7 @@ async function main() {
   runBuiltInPlaylistRegressionCheck();
   runWallpaperEngineIdleDisposeRegressionCheck();
   runWallpaperEngineMinimizeResidentRegressionCheck();
+  runWallpaperEngineRenderVisibilityRegressionCheck();
   runWallpaperEngineWin10YellowBorderRegressionCheck();
   runGestureCameraPermissionRegressionCheck();
   runGesturePlayerActionsRegressionCheck();
