@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to release (e.g. v2.1.1)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mineradio-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate tag matches package version
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="v$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::Tag $TAG does not match package.json version $VERSION"
+            exit 1
+          fi
+          echo "Version validated: $VERSION"
+
+  test:
+    needs: [validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.3.0
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:ci
+      - run: npm run check:quick
+
+  build:
+    needs: [test]
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.3.0
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build:win
+      - run: node scripts/verify-package.js
+      - name: Generate SHA256
+        run: |
+          $file = Get-ChildItem -Path dist -Filter "*.exe" | Select-Object -First 1
+          $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash
+          "SHA256: $hash" | Out-File -FilePath dist/SHA256SUMS.txt -Encoding utf8
+      - uses: actions/upload-artifact@4cec3d8ff04cdd1fb6cf4ec7956e212bb120db2b # v4.6.2
+        with:
+          name: installer
+          path: |
+            dist/*.exe
+            dist/SHA256SUMS.txt
+          retention-days: 7
+
+  publish:
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    environment: release
+
+    steps:
+      - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.9
+        with:
+          name: installer
+          path: dist
+      - name: Create draft release
+        uses: softprops/action-gh-release@c062c08b532815e1b34eb5d06e6b0ba2c5ac1ed5 # v2.1.0
+        with:
+          draft: true
+          files: |
+            dist/*.exe
+            dist/SHA256SUMS.txt
+          body: |
+            ## Mineradio ${{ github.ref_name }}
+
+            ### 下载
+
+            `Mineradio-${{ github.ref_name }}-Setup.exe` 是完整安装包，下载后直接运行即可。
+
+            ### SHA256
+
+            ```
+            $(cat dist/SHA256SUMS.txt)
+            ```

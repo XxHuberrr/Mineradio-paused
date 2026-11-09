@@ -9,6 +9,11 @@
   "private": true,
   "scripts": {
     "start": "electron .",
+    "test": "node scripts/run-ci-tests.js",
+    "test:ci": "node scripts/run-ci-tests.js",
+    "test:electron": "node scripts/run-electron-tests.js",
+    "check:quick": "node scripts/quick-check.js",
+    "check:package": "node scripts/verify-package.js",
     "build:win": "electron-builder --win nsis",
     "build:win:dir": "electron-builder --win dir",
     "build:win:internal-beta": "electron-builder --config electron-builder.internal-beta.json --win nsis --publish never"

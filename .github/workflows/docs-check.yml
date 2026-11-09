@@ -1,0 +1,53 @@
+name: Docs Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.md'
+      - 'docs/**'
+  push:
+    branches: [main]
+    paths:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  markdown-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.3.0
+        with:
+          node-version: '22.x'
+      - name: Markdown lint
+        run: npx markdownlint-cli2 "**/*.md" "#node_modules"
+        continue-on-error: true
+
+  link-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Check relative links
+        run: |
+          errors=0
+          for f in README.md RELEASE.md SECURITY.md; do
+            echo "=== $f ==="
+            grep -oP '\(\./[^)]+' "$f" | while read -r link; do
+              link="${link#(}"
+              if [ ! -f "$link" ] && [ ! -d "$link" ]; then
+                echo "Broken relative link in $f: $link"
+              fi
+            done
+          done
+        continue-on-error: true

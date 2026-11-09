@@ -1,0 +1,41 @@
+name: Scheduled Integration
+
+on:
+  schedule:
+    - cron: '0 2 * * 6'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.3.0
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:ci
+      - run: npm run check:quick
+
+  build-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.3.0
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build:win:dir
+      - name: Verify build
+        run: |
+          if (-not (Test-Path "dist/win-unpacked/Mineradio.exe")) {
+            Write-Error "Build failed: Mineradio.exe not found"
+            exit 1
+          }

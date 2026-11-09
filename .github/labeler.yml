@@ -1,0 +1,19 @@
+"ci":
+  - changed-files:
+    - any-glob-to-any-file: '.github/**'
+
+"tests":
+  - changed-files:
+    - any-glob-to-any-file: 'tests/**'
+
+"desktop":
+  - changed-files:
+    - any-glob-to-any-file: 'desktop/**'
+
+"docs":
+  - changed-files:
+    - any-glob-to-any-file: ['**/*.md', 'docs/**']
+
+"dependencies":
+  - changed-files:
+    - any-glob-to-any-file: ['package.json', 'package-lock.json']

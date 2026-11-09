@@ -1,0 +1,67 @@
+name: Release Dry-Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or tag to build from'
+        required: false
+        default: 'main'
+      version:
+        description: 'Version override (empty = use package.json)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mineradio-release-dry-run
+  cancel-in-progress: false
+
+jobs:
+  dry-run:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.3.0
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run tests
+        run: npm run test:ci
+
+      - name: Run quick-check
+        run: npm run check:quick
+
+      - name: Build Windows installer
+        run: npm run build:win
+
+      - name: Verify package integrity
+        run: node scripts/verify-package.js
+
+      - name: Generate SHA256
+        run: |
+          $file = Get-ChildItem -Path dist -Filter "*.exe" | Select-Object -First 1
+          if ($file) {
+            $hash = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash
+            "SHA256: $hash" | Out-File -FilePath dist/SHA256SUMS.txt -Encoding utf8
+            Write-Host "SHA256: $hash"
+          }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@4cec3d8ff04cdd1fb6cf4ec7956e212bb120db2b # v4.6.2
+        with:
+          name: installer-dry-run
+          path: |
+            dist/*.exe
+            dist/SHA256SUMS.txt
+          retention-days: 7

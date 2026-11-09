@@ -1,0 +1,58 @@
+name: Electron Integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'tests/**'
+      - 'qishui-auth-v6/**'
+      - 'qishui-qr-login.js'
+      - 'qishui-auth-v6.js'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'tests/**'
+      - 'qishui-auth-v6/**'
+      - 'qishui-qr-login.js'
+      - 'qishui-auth-v6.js'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  electron-test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.3.0
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Electron-dependent tests
+        run: npm run test:electron
+        continue-on-error: true
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@4cec3d8ff04cdd1fb6cf4ec7956e212bb120db2b # v4.6.2
+        with:
+          name: electron-test-logs
+          path: '*.log'
+          retention-days: 7

@@ -1,0 +1,63 @@
+name: Windows Build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.3.0
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows directory
+        run: npm run build:win:dir
+
+      - name: Verify build executable
+        run: |
+          if (Test-Path "dist/win-unpacked/Mineradio.exe") {
+            Write-Host "Mineradio.exe present"
+          } else {
+            Write-Error "Mineradio.exe missing"
+            exit 1
+          }
+
+      - name: Check for sensitive files in build
+        run: |
+          $dangerous = @('.cookie', '.env', '.qq-cookie', 'spotify-credentials.json')
+          $found = @()
+          Get-ChildItem -Path dist -Recurse | ForEach-Object {
+            foreach ($pattern in $dangerous) {
+              if ($_.Name -like "*$pattern*") { $found += $_.FullName }
+            }
+          }
+          if ($found.Count -gt 0) {
+            Write-Error "Sensitive files found: $found"
+            exit 1
+          }
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@4cec3d8ff04cdd1fb6cf4ec7956e212bb120db2b # v4.6.2
+        with:
+          name: win-unpacked
+          path: dist/win-unpacked
+          retention-days: 5

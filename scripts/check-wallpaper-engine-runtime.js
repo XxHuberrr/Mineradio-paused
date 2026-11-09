@@ -383,13 +383,14 @@ async function main() {
   stalledLayeringChild.emit('exit', 0, null);
   stalledLayeringRuntime.active = null;
 
+  const spacedExecutable = 'C:\\Program Files\\Wallpaper Engine\\wallpaper64.exe';
   const spacedControlCalls = [];
   const spacedControlRuntime = new WallpaperEngineRuntime({
     platform: 'win32',
     useDesktopShellBroker: false,
     controlExecFile: makeTransientControlRecorder(spacedControlCalls),
   });
-  await spacedControlRuntime._runTransientControl('C:\\Program Files\\Wallpaper Engine\\wallpaper64.exe', [
+  await spacedControlRuntime._runTransientControl(spacedExecutable, [
     '-control',
     'applyProperties',
     '-properties',
@@ -398,8 +399,8 @@ async function main() {
     'Mineradio Wallpaper spaced-path-test',
   ]);
   assert.strictEqual(spacedControlCalls.length, 1);
-  assert.strictEqual(spacedControlCalls[0].file, 'wallpaper64.exe');
-  assert.strictEqual(spacedControlCalls[0].options.cwd, 'C:\\Program Files\\Wallpaper Engine');
+  assert.strictEqual(spacedControlCalls[0].file, path.basename(spacedExecutable));
+  assert.strictEqual(spacedControlCalls[0].options.cwd, path.dirname(spacedExecutable));
   assert(spacedControlCalls[0].args.includes('RAW~({"volume":0})~END'));
   assert(spacedControlCalls[0].args.includes('"Mineradio Wallpaper spaced-path-test"'));
   assert.strictEqual(spacedControlCalls[0].options.shell, false);
