@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Node.js 纯 JS 回归测试（不依赖 Electron 运行时和本地二进制文件）
+  test-node:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Node-level regression tests
+        run: |
+          set -e
+          FAILURES=0
+          SKIP_TESTS="qishui-passport-qr-login.test.js"
+          for f in tests/*.test.js; do
+            base="$(basename "$f")"
+            for skip in $SKIP_TESTS; do
+              if [ "$base" = "$skip" ]; then
+                echo "=== $base (skipped: requires Electron runtime) ==="
+                continue 2
+              fi
+            done
+            echo "=== $base ==="
+            node "$f" || FAILURES=$((FAILURES + 1))
+          done
+          if [ "$FAILURES" -gt 0 ]; then
+            echo "::error::$FAILURES test file(s) failed"
+            exit 1
+          fi
+
+      - name: Quick check (static analysis)
+        run: node scripts/quick-check.js
