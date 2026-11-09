@@ -1,0 +1,337 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <script>
+      // Install the observer before sdk-glue/bdms. It records field names and
+      // lengths only, never credential values, so first-run bootstrap can be
+      // reconstructed without leaking security state into diagnostics.
+      window.__qishuiSecurityTrace = [];
+      const safeUrl = value => {
+        try {
+          const url = new URL(String(value), location.href);
+          const fields = [...url.searchParams.keys()].sort();
+          return `${url.origin}${url.pathname}${fields.length ? `?<${fields.join(',')}>` : ''}`;
+        } catch (_) {
+          return String(value).split('?')[0];
+        }
+      };
+      const trace = (kind, detail = {}) => {
+        window.__qishuiSecurityTrace.push({ at: Date.now(), kind, ...detail });
+        if (window.__qishuiSecurityTrace.length > 500) window.__qishuiSecurityTrace.shift();
+      };
+
+      for (const method of ['getItem', 'setItem', 'removeItem']) {
+        const original = Storage.prototype[method];
+        Storage.prototype[method] = function (key, value) {
+          const result = original.apply(this, arguments);
+          trace(`storage.${method}`, {
+            key: String(key),
+            valueLength: method === 'getItem'
+              ? String(result || '').length
+              : String(value || '').length,
+          });
+          return result;
+        };
+      }
+
+      const nativeOpen = XMLHttpRequest.prototype.open;
+      const nativeSend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.open = function (method, url) {
+        this.__qishuiTraceUrl = safeUrl(url);
+        trace('xhr.open', { method: String(method), url: this.__qishuiTraceUrl });
+        return nativeOpen.apply(this, arguments);
+      };
+      XMLHttpRequest.prototype.send = function (body) {
+        trace('xhr.send', {
+          url: this.__qishuiTraceUrl || '',
+          bodyLength: body == null ? 0 : String(body).length,
+        });
+        return nativeSend.apply(this, arguments);
+      };
+
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        trace('fetch', {
+          url: safeUrl(input && input.url ? input.url : input),
+          method: String((init && init.method) || (input && input.method) || 'GET'),
+        });
+        return nativeFetch.apply(this, arguments);
+      };
+    </script>
+    <script src="react.js"></script>
+    <script src="react-dom.js"></script>
+    <script>
+      window.ucSecondVerifyReact = window.React;
+      window.ucSecondVerifyReactDom = window.ReactDOM;
+    </script>
+    <script src="sdk-glue.js"></script>
+    <script>
+      window._SdkGlueInit({
+        self: { aid: 386088, pageId: 24554 },
+        bdms: { aid: 386088, paths: ['/passport'] },
+      });
+
+      function xor5Hex(value) {
+        const bytes = new TextEncoder().encode(String(value));
+        let result = '';
+        for (const byte of bytes) result += (byte ^ 5).toString(16);
+        return result;
+      }
+
+      async function storageStatus() {
+        let usage;
+        let quota;
+        try {
+          const estimate = await navigator.storage.estimate();
+          usage = estimate.usage;
+          quota = estimate.quota;
+        } catch (_) {}
+        let size = 0;
+        try {
+          for (const key in localStorage) {
+            if (Object.prototype.hasOwnProperty.call(localStorage, key)) {
+              size += localStorage[key].length;
+            }
+          }
+        } catch (_) {
+          size = -1;
+        }
+        return {
+          indexedDB: {
+            idb: typeof indexedDB,
+            open: indexedDB && typeof indexedDB.open,
+            indexedDB: typeof indexedDB,
+            IDBKeyRange: typeof IDBKeyRange,
+            openDatabase: typeof window.openDatabase,
+            isSafari: false,
+            hasFetch: typeof fetch === 'function' && fetch.toString().includes('[native code'),
+          },
+          localStorage: { isSupportLStorage: true, size, write: true },
+          storageQuotaStatus: { usage, quota, isPrivate: Boolean(quota && quota < 120000000) },
+        };
+      }
+
+      function webglInfo() {
+        try {
+          const canvas = document.createElement('canvas');
+          const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+          const debug = gl && gl.getExtension('WEBGL_debug_renderer_info');
+          return {
+            vendor: gl && gl.getParameter(debug && debug.UNMASKED_VENDOR_WEBGL),
+            renderer: gl && gl.getParameter(debug && debug.UNMASKED_RENDERER_WEBGL),
+          };
+        } catch (_) {
+          return {};
+        }
+      }
+
+      window.__qishuiBrowserInfo = async function () {
+        let permissions = [];
+        try {
+          const permission = await navigator.permissions.query({ name: 'notifications' });
+          permissions = [{ name: 'notifications', state: permission.state }];
+        } catch (_) {}
+        const navigation = performance.getEntries()[0] || {};
+        const info = {
+          hardwareConcurrency: navigator.hardwareConcurrency,
+          webdriver: Boolean(navigator.webdriver || /headless/i.test(navigator.userAgent)),
+          chromedriver: false,
+          shelldriver: false,
+          plugins: navigator.plugins ? navigator.plugins.length : 0,
+          permissions,
+          innerHeight: window.innerHeight,
+          innerWidth: window.innerWidth,
+          outerHeight: window.outerHeight,
+          outerWidth: window.outerWidth,
+          stoargeStatus: await storageStatus(),
+          webgl: webglInfo(),
+          notificationPermission: window.Notification ? Notification.permission : 'none',
+          performance: {
+            timeOrigin: performance.timeOrigin,
+            usedJSHeapSize: performance.memory ? performance.memory.usedJSHeapSize : 'unsupport',
+            navigationTiming: {
+              decodedBodySize: navigation.decodedBodySize,
+              entryType: navigation.entryType,
+              initiatorType: navigation.initiatorType,
+              name: navigation.name,
+              renderBlockingStatus: navigation.renderBlockingStatus,
+              serverTiming: (navigation.serverTiming || []).map(item => item.name).join(','),
+              guleStart: 'none',
+              guleDuration: 'none',
+            },
+          },
+          // Keep the official desktop fingerprint even though Mineradio serves
+          // this isolated security page from a loopback-only asset server.
+          request_host: 'resources',
+          request_pathname: '/main.asar/main.html',
+          browser: {
+            t: String(Date.now()).split('').reverse().join(''),
+            bit_protocol: 'false',
+            bit_helper: false,
+          },
+        };
+        return { raw: info, encrypted: xor5Hex(JSON.stringify(info)) };
+      };
+
+      window.__qishuiRequest = function (request) {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open(request.method || 'GET', request.url, true);
+          for (const [name, value] of Object.entries(request.headers || {})) {
+            xhr.setRequestHeader(name, String(value));
+          }
+          xhr.timeout = request.timeout || 20000;
+          xhr.onload = () => resolve({
+            status: xhr.status,
+            body: xhr.responseText,
+            responseURL: xhr.responseURL,
+            headers: xhr.getAllResponseHeaders(),
+          });
+          xhr.onerror = () => reject(new Error('XMLHttpRequest network error'));
+          xhr.ontimeout = () => reject(new Error('XMLHttpRequest timeout'));
+          xhr.send(request.body == null ? null : request.body);
+        });
+      };
+
+      function setMfaStatus(message, isError = false) {
+        const element = document.getElementById('mfa-status');
+        if (!element) return;
+        element.textContent = message || '';
+        element.style.color = isError ? '#d93025' : '#202124';
+        element.style.display = message ? 'block' : 'none';
+      }
+
+      function normalizeObject(value) {
+        if (!value) return {};
+        if (typeof value === 'object') return value;
+        try { return JSON.parse(String(value)); } catch (_) { return {}; }
+      }
+
+      function formEncode(values) {
+        const result = new URLSearchParams();
+        for (const [key, value] of Object.entries(values || {})) {
+          if (value == null) continue;
+          result.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+        }
+        return result.toString();
+      }
+
+      function loadVerifyScript(url) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.type = 'text/javascript';
+          script.crossOrigin = 'anonymous';
+          script.src = url;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error(`二次验证组件加载失败：${safeUrl(url)}`));
+          document.head.appendChild(script);
+        });
+      }
+
+      async function expandVerifyCenterDecision(originDecision, options) {
+        if (originDecision.verify_from !== 'verify_center') return originDecision;
+        const payload = {
+          aid: 386088,
+          ...originDecision,
+          ...(options.generalParams || {}),
+        };
+        delete payload.is_login;
+        const response = await window.__qishuiRequest({
+          method: 'POST',
+          url: 'https://api.qishui.com/passport/safe/pack_verify_ways_data/?aid=386088',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'x-tt-passport-verify-portrait': originDecision.verify_portrait_id || '',
+          },
+          body: formEncode(payload),
+          timeout: 30000,
+        });
+        const envelope = JSON.parse(response.body || '{}');
+        const expanded = envelope.data || envelope;
+        if (response.status < 200 || response.status >= 400 || !expanded) {
+          throw new Error(`获取二次验证决策失败：HTTP ${response.status}`);
+        }
+        return { ...originDecision, ...expanded };
+      }
+
+      window.__qishuiCancelSecondVerify = function () {
+        if (window.__qishuiMfaResolve) {
+          window.__qishuiMfaResolve({ status: false, message: '用户取消二次验证' });
+        }
+      };
+
+      window.__qishuiSecondVerify = async function (originDecision, options = {}) {
+        setMfaStatus('正在加载汽水安全验证组件…');
+        try {
+          const decision = await expandVerifyCenterDecision(originDecision || {}, options);
+          if (!decision.url) throw new Error('2046 决策中缺少二次验证组件 URL');
+          const eventParams = normalizeObject(decision.event_params);
+          const resource = new URL(String(decision.url), 'https://api.qishui.com/');
+          resource.searchParams.set('aid', '386088');
+          resource.searchParams.set('verify_reason', String(eventParams.verify_reason || ''));
+          resource.searchParams.set('verify_scene', String(eventParams.verify_scene || ''));
+          window.$$account_verify_portrait_id = decision.verify_portrait_id || '';
+
+          if (typeof window.ucWebSecondVerify !== 'function') {
+            await loadVerifyScript(resource.toString());
+          }
+          if (typeof window.ucWebSecondVerify !== 'function') {
+            throw new Error('官方二次验证组件未导出 ucWebSecondVerify');
+          }
+
+          setMfaStatus('请在窗口中完成二次验证');
+          return await new Promise(resolve => {
+            let finished = false;
+            const finish = result => {
+              if (finished) return;
+              finished = true;
+              window.__qishuiMfaResolve = null;
+              const normalized = result && typeof result === 'object'
+                ? JSON.parse(JSON.stringify(result))
+                : { status: false, message: String(result || '验证未完成') };
+              resolve(normalized);
+            };
+            window.__qishuiMfaResolve = finish;
+            const data = {
+              verifyFinishCallback: finish,
+              aid: 386088,
+              isNewVerifyUI: true,
+              generalParams: options.generalParams || {},
+              newSecondVerifyWebOptions: {
+                host: 'https://api.qishui.com',
+                verifyAppName: '汽水音乐移动端',
+              },
+              newSecondVerificationCall: { reportAppLog: () => {} },
+              ...decision,
+              event_params: eventParams,
+              monitorTime: {
+                startTime: Date.now(),
+                fetchEndTime: Date.now(),
+                scriptLoadStartTime: 0,
+                scriptLoadEndTime: Date.now(),
+                renderStartTime: Date.now(),
+              },
+              fun: decision.verify_from === 'verify_center' ? 'verify_center' : 'verify',
+              uc_account_verify_version: '1.0.29',
+            };
+            window.ucWebSecondVerify(data);
+          });
+        } catch (error) {
+          setMfaStatus(String(error && error.message ? error.message : error), true);
+          throw error;
+        }
+      };
+    </script>
+    <style>
+      html, body { width: 100%; height: 100%; margin: 0; background: #fff; font-family: sans-serif; }
+      #mfa-status { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647; padding: 9px 14px; border-radius: 8px; background: rgba(255,255,255,.96); box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+      #mfa-cancel { position: fixed; right: 14px; bottom: 14px; z-index: 2147483647; padding: 8px 14px; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div id="mfa-status" style="display:none"></div>
+    <button id="mfa-cancel" type="button" onclick="window.__qishuiCancelSecondVerify()">取消验证</button>
+  </body>
+</html>

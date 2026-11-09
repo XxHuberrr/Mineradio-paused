@@ -10,6 +10,8 @@
 
 - 常驻 3D 歌单架默认视觉要接近右键展开后的实体卡效果，不能再把 `passiveAlways` 压成灰暗半透明幽灵卡；当前边界是保留 `shelfBgOpacity` 的实卡黑玻璃底，`passiveAlways` 只做极轻微透明/亮度压制。
 - 层级不能因此回退：常驻未命中时 shelf group/card 仍保持在歌词后层，避免长期遮挡歌词；只有鼠标真实命中/选中卡片后，通过 `selected` / `floatMix` 浮起动画把卡片抬到歌词前景。
+- 常驻侧栏中，已选卡片只在光标仍处于活动显示状态时允许升到歌词前方；光标自动隐藏后应让 `floatMix` 有界退场并回到后层，不能让一次旧悬停永久压住歌词。
+- 多行歌词不能只提升行 Mesh 或最外层 `stageLyrics.group`；`rowLayerGroup`、`contextGroup`、`readabilityGroup` 必须同步当前 `renderBase`，防止 Three.js 嵌套 Group 重写透明排序层级。
 - 相关位置：`public/index.html` 的 `makeShelfManager().placeCard()`，关注 `passiveAlways`、`floatMix`、`card.mesh.renderOrder`、`group.renderOrder` 和 `shelfVisibility`。
 - 禁止回退：不要为了让常驻卡片更清楚而把整组歌单架永久放到歌词上层；不要再把常驻默认卡片透明度压回 0.5 左右导致看起来像没有右键展开质感。
 

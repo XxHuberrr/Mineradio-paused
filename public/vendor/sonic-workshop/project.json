@@ -1,0 +1,387 @@
+{
+	"approved" : true,
+	"audio" : 
+	{
+		"enabled" : true
+	},
+	"contentrating" : "Everyone",
+	"description" : "功能\n音频响应 — 160×160 柱子网格随音乐起伏，实时 FFT 频段分析\n波纹效果 — 低频触发时地面扩散涟漪，柱子弹起\n流星效果 — 高频触发时流星坠落，撞击地面产生粒子爆炸\n空闲波浪 — 无音乐时柱子呼吸状微动，保持画面活力\n10 套色彩主题 — 靛蓝紫、深海蓝、冰蓝、翡翠绿、暖金黄、琥珀橙、血红、珊瑚粉、霓虹紫粉、极简黑白\n专辑封面 — 兼容 Wallpaper Engine Media Integration，显示当前歌曲封面、标题、艺术家，封面切换带过渡动画\n播放器控制器 — 悬浮毛玻璃卡片，三种尺寸预设\n多参数可调 — 渲染精度、音频响应强度、响应范围、视角、旋转速度、波纹/流星灵敏度与强度\n版本\nv15 — 频段分布优化(0-3.5kHz 主响应)，渲染精度细分(80-320)，空闲波浪防抖机制，壁纸配置重载修复，波纹/流星生成范围扩大，脉冲锚点触发计数调高(5-13)\nv15 — 大幅优化性能\nv14 — 渲染精度配置，响应衰减修复，闲置点击流星\nv13 — 专辑封面过渡动画，项目瘦身，构建优化\nv12 — Media Integration 支持，内联播放器 UI\nv11 — 空闲波浪系统\nv10 — 粒子系统，弹性动画\nv9 — 流星效果，自动节拍检测\nv8 — 波纹效果\nv7 — 8 频段 FFT + 音色指标\nv6 — 10 套色彩主题\nv5 — 相机控制，着色器优化\nv4 — Wallpaper Engine 音频集成\nv3 — 160×160 实例化网格\nv2 — Three.js 3D 场景\nv1 — 初始发布\n技术栈\nReact 19 · Three.js · React Three Fiber · Framer Motion · Tailwind CSS · GLSL Shaders",
+	"file" : "index.html",
+	"general" : 
+	{
+		"properties" : 
+		{
+			"audioIntensity" : 
+			{
+				"index" : 5,
+				"max" : 2.5,
+				"min" : 0.3,
+				"order" : 105,
+				"step" : 0.1,
+				"text" : "音频响应强度",
+				"type" : "slider",
+				"value" : 1.15
+			},
+			"autoRotateEnabled" : 
+			{
+				"index" : 18,
+				"order" : 118,
+				"text" : "自动旋转",
+				"type" : "bool",
+				"value" : true
+			},
+			"autoRotateSpeed" : 
+			{
+				"index" : 19,
+				"max" : 60,
+				"min" : 1,
+				"order" : 119,
+				"step" : 1,
+				"text" : "旋转速度",
+				"type" : "slider",
+				"value" : 7
+			},
+			"cameraAngleX" : 
+			{
+				"index" : 20,
+				"max" : 360,
+				"min" : 0,
+				"order" : 120,
+				"step" : 5,
+				"text" : "水平角度",
+				"type" : "slider",
+				"value" : 150
+			},
+			"cameraAngleY" : 
+			{
+				"index" : 21,
+				"max" : 70,
+				"min" : 10,
+				"order" : 121,
+				"step" : 5,
+				"text" : "垂直仰角",
+				"type" : "slider",
+				"value" : 30
+			},
+			"cameraDistance" : 
+			{
+				"index" : 17,
+				"max" : 100,
+				"min" : 20,
+				"order" : 117,
+				"step" : 5,
+				"text" : "视角距离",
+				"type" : "slider",
+				"value" : 80
+			},
+			"controllerSize" : 
+			{
+				"index" : 24,
+				"options" : 
+				[
+					{
+						"label" : "小 (紧凑)",
+						"value" : "small"
+					},
+					{
+						"label" : "中 (均衡)",
+						"value" : "medium"
+					},
+					{
+						"label" : "大 (醒目)",
+						"value" : "large"
+					}
+				],
+				"order" : 124,
+				"text" : "控制器尺寸",
+				"type" : "combo",
+				"value" : "large"
+			},
+			"controllerX" : 
+			{
+				"index" : 25,
+				"max" : 80,
+				"min" : 0,
+				"order" : 125,
+				"step" : 1,
+				"text" : "控制器水平位置 (%)",
+				"type" : "slider",
+				"value" : 2
+			},
+			"controllerY" : 
+			{
+				"index" : 26,
+				"max" : 90,
+				"min" : 0,
+				"order" : 126,
+				"step" : 1,
+				"text" : "控制器垂直位置 (%)",
+				"type" : "slider",
+				"value" : 3
+			},
+			"gridSize" : 
+			{
+				"index" : 4,
+				"options" : 
+				[
+					{
+						"label" : "低 (120x120)",
+						"value" : 120
+					},
+					{
+						"label" : "标准 (160x160)",
+						"value" : 160
+					},
+					{
+						"label" : "高 (320x320)",
+						"value" : 320
+					},
+					{
+						"label" : "超高 (640x640)",
+						"value" : 640
+					},
+					{
+						"label" : "极高 (1080x1080)",
+						"value" : 1080
+					},
+					{
+						"label" : "抽象 (4096x4096)",
+						"value" : 4096
+					}
+				],
+				"order" : 104,
+				"text" : "渲染精度",
+				"type" : "combo",
+				"value" : 320
+			},
+			"idleWaveDebounce" : 
+			{
+				"index" : 15,
+				"max" : 5,
+				"min" : 0.5,
+				"order" : 115,
+				"step" : 0.5,
+				"text" : "空闲波浪防抖 (秒)",
+				"type" : "slider",
+				"value" : 1
+			},
+			"idleWaveEnabled" : 
+			{
+				"index" : 14,
+				"order" : 114,
+				"text" : "空闲波浪",
+				"type" : "bool",
+				"value" : true
+			},
+			"idleWaveFadeDuration" : 
+			{
+				"index" : 16,
+				"max" : 5,
+				"min" : 0.5,
+				"order" : 116,
+				"step" : 0.5,
+				"text" : "空闲波浪过渡 (秒)",
+				"type" : "slider",
+				"value" : 1
+			},
+			"meteorClickEnabled" : 
+			{
+				"index" : 13,
+				"order" : 113,
+				"text" : "点击触发流星",
+				"type" : "bool",
+				"value" : true
+			},
+			"meteorCooldown" : 
+			{
+				"index" : 12,
+				"max" : 400,
+				"min" : 0,
+				"order" : 112,
+				"step" : 10,
+				"text" : "流星冷却 (帧)",
+				"type" : "slider",
+				"value" : 60
+			},
+			"meteorEnabled" : 
+			{
+				"index" : 10,
+				"order" : 110,
+				"text" : "启用流星",
+				"type" : "bool",
+				"value" : true
+			},
+			"meteorSensitivity" : 
+			{
+				"index" : 11,
+				"max" : 0.8,
+				"min" : 0.1,
+				"order" : 111,
+				"step" : 0.05,
+				"text" : "流星灵敏度",
+				"type" : "slider",
+				"value" : 0.3
+			},
+			"peakColorEnabled" : 
+			{
+				"index" : 2,
+				"order" : 102,
+				"text" : "启用强调色",
+				"type" : "bool",
+				"value" : true
+			},
+			"peakColorIntensity" : 
+			{
+				"index" : 3,
+				"max" : 2,
+				"min" : 0,
+				"order" : 103,
+				"step" : 0.1,
+				"text" : "强调色强度",
+				"type" : "slider",
+				"value" : 0.62
+			},
+			"pulseEnabled" : 
+			{
+				"index" : 7,
+				"order" : 107,
+				"text" : "启用波纹",
+				"type" : "bool",
+				"value" : true
+			},
+			"pulseSensitivity" : 
+			{
+				"index" : 8,
+				"max" : 0.5,
+				"min" : 0.05,
+				"order" : 108,
+				"step" : 0.01,
+				"text" : "波纹灵敏度",
+				"type" : "slider",
+				"value" : 0.05
+			},
+			"pulsecooldown" : 
+			{
+				"index" : 9,
+				"max" : 200,
+				"min" : 0,
+				"order" : 109,
+				"text" : "波纹冷却 (帧)",
+				"type" : "slider",
+				"value" : 0
+			},
+			"responseRange" : 
+			{
+				"index" : 6,
+				"max" : 2,
+				"min" : 0.3,
+				"order" : 106,
+				"step" : 0.1,
+				"text" : "响应范围",
+				"type" : "slider",
+				"value" : 1.3
+			},
+			"schemecolor" : 
+			{
+				"order" : 0,
+				"text" : "ui_browse_properties_scheme_color",
+				"type" : "color",
+				"value" : "0.3333333333333333 0.0196078431372549 0.3333333333333333"
+			},
+			"showAlbumCover" : 
+			{
+				"index" : 23,
+				"order" : 123,
+				"text" : "显示专辑封面",
+				"type" : "bool",
+				"value" : true
+			},
+			"showPlayerController" : 
+			{
+				"index" : 22,
+				"order" : 122,
+				"text" : "显示播放器控制器",
+				"type" : "bool",
+				"value" : false
+			},
+			"theme" : 
+			{
+				"index" : 0,
+				"options" : 
+				[
+					{
+						"label" : "自动轮询",
+						"value" : "cycle"
+					},
+					{
+						"label" : "靛蓝紫",
+						"value" : "nocturnal"
+					},
+					{
+						"label" : "深海蓝",
+						"value" : "ocean-deep"
+					},
+					{
+						"label" : "冰蓝",
+						"value" : "arctic-aurora"
+					},
+					{
+						"label" : "翡翠绿",
+						"value" : "cyber-forest"
+					},
+					{
+						"label" : "暖金黄",
+						"value" : "golden-hour"
+					},
+					{
+						"label" : "琥珀橙",
+						"value" : "ember-fire"
+					},
+					{
+						"label" : "血红",
+						"value" : "crimson-sunset"
+					},
+					{
+						"label" : "珊瑚粉",
+						"value" : "coral-mirage"
+					},
+					{
+						"label" : "霓虹紫粉",
+						"value" : "neon-tokyo"
+					},
+					{
+						"label" : "极简黑白",
+						"value" : "minimal-monochrome"
+					}
+				],
+				"order" : 100,
+				"text" : "颜色主题",
+				"type" : "combo",
+				"value" : "coral-mirage"
+			},
+			"themeCycleInterval" : 
+			{
+				"index" : 1,
+				"max" : 300,
+				"min" : 10,
+				"order" : 101,
+				"step" : 10,
+				"text" : "轮询间隔 (秒)",
+				"type" : "slider",
+				"value" : 50
+			}
+		},
+		"supportsaudioprocessing" : true
+	},
+	"name" : "Sonic Topography",
+	"preview" : "preview.gif",
+	"ratingsex" : "none",
+	"ratingviolence" : "none",
+	"tags" : [ "Sci-Fi" ],
+	"title" : "音域回响",
+	"type" : "web",
+	"version" : 2,
+	"visibility" : "public",
+	"workshopid" : "3747222633",
+	"workshopurl" : "steam://url/CommunityFilePage/3747222633"
+}

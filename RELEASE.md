@@ -1,64 +1,46 @@
-# 发布流程
+# Mineradio 2.2.0 发布流程
 
-## v1.1.0 发布边界
+## 发布边界
 
-- `v1.1.0` 是纯净安装发布版，从当前 `resources/app` 可信源码重新构建。
-- 不复用旧 `dist/`、旧安装包、旧 `node_modules`、旧备份包或任何历史 packaged build。
-- 不生成 `v1.0.10 -> v1.1.0` 快速补丁。
-- 不把 `v1.1.0` 设置为旧版软件内更新通道的 latest；`v1.0.10` 用户需要手动下载新版安装包并纯净安装。
-- GitHub Release 需要明确提示：`v1.0.10` 及更早安装包有风险，请隔离旧 `.exe` 安装包，不要继续安装或转发。
-- 安装包样式继续沿用 `docs/INSTALLER_STYLE.md` 的中文极简黑白蓝格式。
+- 正式版本：`2.2.0`
+- Git tag：`v2.2.0`
+- Release 标题：`Mineradio 2.2.0`
+- 安装包：`Mineradio-2.2.0-Setup.exe`
+- 仅从当前可信源码完整构建，不复用旧安装包或旧 `dist/`。
+- 正式 Release 不混入 Mineradio_Beat 产物。
+- GitHub Release 附带完整安装包 `Mineradio-2.2.0-Setup.exe` 和最小版本说明 `latest.yml`。后者供旧版主检测失败时的备用线路使用；不上传 blockmap 或补丁。
+- `2.0.3+` 客户端不得从 Release assets 识别或下载安装包，软件内更新仍只读取正文中的网盘线路。
+- Release 正文使用两条 `mineradio-download-page` 隐藏标记提供本次下载入口，保留百度云链接中的提取码参数。
+
+## 网盘分发
+
+本次下载入口已更换，请使用以下新网盘链接，并更新旧收藏。通过公告中的网盘入口下载，也是在支持 Mineradio 的持续更新。
+
+- 夸克盘：[下载 Mineradio 2.2.0](https://pan.quark.cn/s/4b124d3e81d3)
+- 百度云：[下载 Mineradio 2.2.0](https://pan.baidu.com/s/17CwpHUza67w_Grgc3s5nOw?pwd=SJHP)（提取码 `SJHP`）
+
+<!-- mineradio-download-page: 夸克盘|https://pan.quark.cn/s/4b124d3e81d3 -->
+<!-- mineradio-download-page: 百度云|https://pan.baidu.com/s/17CwpHUza67w_Grgc3s5nOw?pwd=SJHP -->
+
+## 公开更新说明
+
+- 本次下载入口已更换，请使用公告中的新网盘链接，并更新旧收藏。
+- 修复音乐接口的登录、账号识别与播放稳定性问题。
+- 改善歌单加载、搜索分页，以及网络异常后的恢复。
+- 新增粒子预设与更多手势操作，改善日常播放体验。
+
+## 发布资产
+
+GitHub Release 上传 `dist/Mineradio-2.2.0-Setup.exe` 和 `docs/update/latest.yml`。版本说明仅包含 `version/releaseDate`，不得使用带安装包下载字段的构建工具清单。构建生成的 blockmap、安装清单与校验记录仍只用于本地验收。
+
+2.1.0 的备用检测和入口限制见 [更新公告与旧版兼容](docs/UPDATE_DELIVERY.md)。每次发布都要同步版本说明；缺失会使主接口访问失败的旧客户端无法发现更新。
+
+安装包 SHA-256：`8fd318283bab2fe98190f7b879ede423dd8274a0aeec8d321570b8d022d4f989`。
 
 ## 发布前检查
 
-- 确认 `package.json` 和 `package-lock.json` 版本号正确。
-- 确认 `mineradio.update.owner/repo` 指向正式仓库。
-- 确认 `.cookie`、`.qq-cookie`、`updates/`、`node_modules/`、旧 `dist/` 没有进入 git。
-- 确认 README/SECURITY/CHANGELOG/Release 正文包含 `v1.0.10` 旧安装包隔离说明。
-- 运行语法检查：`git diff --check`、`node --check server.js`、前端内联脚本解析。
-- 运行 Git 跟踪风险残留检查，确认没有跟踪 `.exe/.dll/.scr/.bat/.cmd/.ps1/.vbs/.jse/.wsf/.hta/.xlsm` 等可执行/脚本残留。
-- 从当前源码执行 `npm run build:win` 生成 Windows 安装包。
-- 对新生成的安装包和当前源码执行安全扫描。
-- 生成并记录新安装包 SHA256。
-
-## GitHub Release
-
-Release tag：
-
-```text
-v1.1.0
-```
-
-Release 标题：
-
-```text
-Mineradio v1.1.0 纯净安装版
-```
-
-建议上传资产：
-
-- `dist/Mineradio-1.1.0-Setup.exe`
-- `dist/Mineradio-1.1.0-Setup.exe.blockmap`（可选；本次不作为旧版软件内更新使用）
-- `dist/Mineradio-1.1.0-SHA256SUMS.txt`
-
-本次不要上传：
-
-- `latest.yml`
-- `v1.0.10 -> v1.1.0` 快速补丁
-
-## 更新检测
-
-应用会请求 GitHub Releases latest。为了避免 `v1.0.10` 旧客户端通过软件内更新直接拉到 `v1.1.0`，本次 GitHub Release 不应设为旧更新通道的 latest。
-
-本地验证更新链路时，可以用临时 manifest：
-
-```json
-{
-  "latestVersion": "1.1.0-test",
-  "release": {
-    "name": "Mineradio v1.1.0-test",
-    "downloadUrl": "http://127.0.0.1:3144/Mineradio-1.1.0-Setup.exe",
-    "notes": ["本地在线更新链路测试"]
-  }
-}
-```
+- 运行完整回归检查与 Electron 启动检查。
+- 构建并检查 `win-unpacked/resources/app` 内容，核对正式版本、资源完整性和源码一致性。
+- 验证安装包启动、退出、重启和用户数据恢复。
+- 确认仓库与安装包不包含 Cookie、Token、凭据、缓存或本机日志。
+- 核对安装包 SHA-256，以及公告、README 和软件更新入口中的两条新网盘链接。

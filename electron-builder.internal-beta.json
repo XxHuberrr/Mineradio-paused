@@ -1,0 +1,75 @@
+{
+  "appId": "com.mineradio.beat.internal",
+  "productName": "Mineradio_Beat",
+  "directories": {
+    "output": "dist-internal-beta",
+    "buildResources": "build"
+  },
+  "afterPack": "build/after-pack.js",
+  "toolsets": {
+    "winCodeSign": "1.1.0"
+  },
+  "extraMetadata": {
+    "name": "mineradio-beat-internal",
+    "productName": "Mineradio_Beat",
+    "version": "1.1.2",
+    "mineradio": {
+      "internalBeta": true,
+      "runtimeName": "Mineradio_Beat",
+      "appUserModelId": "com.mineradio.beat.internal",
+      "update": {
+        "disabled": true,
+        "provider": "none",
+        "preview": false,
+        "preferMirrors": false,
+        "mirrors": []
+      }
+    }
+  },
+  "files": [
+    "desktop/**/*",
+    "public/**/*",
+    "build/**/*",
+    "cuefield/**/*",
+    "server.js",
+    "*-api.js",
+    "qishui-audio-decryptor/**/*",
+    "dj-analyzer.js",
+    "LICENSE",
+    "NOTICE.md",
+    "docs/THIRD_PARTY_PORTS.md",
+    "package.json",
+    "!public/index.*.html",
+    "public/index.html"
+  ],
+  "asar": true,
+  "win": {
+    "executableName": "Mineradio_Beat",
+    "icon": "build/icon.ico",
+    "signAndEditExecutable": false,
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Mineradio_Beat",
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "installerSidebar": "build/installerSidebar.bmp",
+    "uninstallerSidebar": "build/installerSidebar.bmp",
+    "installerHeader": "build/installerHeader.bmp",
+    "include": "build/installer-internal-beta.nsh",
+    "artifactName": "Mineradio_Beat-v${version}-灰度内测版-Setup.${ext}"
+  },
+  "publish": null
+}

@@ -227,6 +227,7 @@
       size:1,opacity:.92,clickThrough:true,lyricGlowParticles:false,cinema:true,highlightFollow:false,frameRate:60,
       lyricGlow:true,lyricGlowBeat:true,lyricGlowStrength:.35,highBloom:0,beatGlow:0,beatPulse:0,bass:0,feather:.055,
       fontFamily:'Inter,"Noto Sans SC","PingFang SC","Microsoft YaHei",Arial,sans-serif',
+      customFont:null,
       fontWeight:900,letterSpacing:0,lineHeight:1,lyricScale:1,
       colors:{primary:'#f6fdff',secondary:'#a8f6ff',highlight:'#fff0b8',glow:'#9cffdf'},
       displayColors:{primary:'#f6fdff',secondary:'#a8f6ff',highlight:'#fff0b8',glow:'#9cffdf'}
@@ -711,10 +712,35 @@
         bottom:rect.bottom + padY
       }).catch(function(){});
     }
+    var customFontState = { id:'', family:'' };
+    function applyCustomFontPayload(font) {
+      font = font || null;
+      if (!font || !font.id || !font.family || !font.dataUrl || typeof FontFace !== 'function' || !document.fonts) {
+        if (!font) customFontState = { id:'', family:'' };
+        return;
+      }
+      if (customFontState.id === font.id && customFontState.family === font.family) return;
+      customFontState = { id:String(font.id), family:String(font.family) };
+      try {
+        var face = new FontFace(String(font.family), 'url("' + String(font.dataUrl) + '")');
+        face.load().then(function(loadedFace){
+          document.fonts.add(loadedFace);
+          if (state && state.fontFamily && state.fontFamily.indexOf(String(font.family)) !== -1) {
+            fitLyricText(true);
+            drawFrame(performance.now(), true);
+          }
+        }).catch(function(e){
+          console.warn('[DesktopLyrics] custom font load failed', e);
+        });
+      } catch (e) {
+        console.warn('[DesktopLyrics] custom font register failed', e);
+      }
+    }
     function applyState(next){
       next = next || {};
       state = Object.assign({}, state, next);
       state.colors = Object.assign({}, state.colors, next.colors || {});
+      applyCustomFontPayload(next.customFont);
       applyDesktopPlayback(next.playback);
       applyDesktopBeatMapPayload(next);
       var motion = Object.assign({}, next.motion || {});

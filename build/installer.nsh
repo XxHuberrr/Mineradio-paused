@@ -37,7 +37,27 @@
 !include nsDialogs.nsh
 !include WinMessages.nsh
 
-!define MINERADIO_INSTALL_MARKER ".mineradio-install-root"
+!ifndef MINERADIO_INSTALL_DIR_NAME
+  !define MINERADIO_INSTALL_DIR_NAME "Mineradio"
+!endif
+!ifndef MINERADIO_INSTALL_DIR_NAME_LOWER
+  !define MINERADIO_INSTALL_DIR_NAME_LOWER "mineradio"
+!endif
+!ifndef MINERADIO_INSTALL_MARKER
+  !define MINERADIO_INSTALL_MARKER ".mineradio-install-root"
+!endif
+!ifndef MINERADIO_MARKER_APP_ID
+  !define MINERADIO_MARKER_APP_ID "com.mineradio.desktop"
+!endif
+!ifndef MINERADIO_INSTALL_BRAND
+  !define MINERADIO_INSTALL_BRAND "MINERADIO"
+!endif
+!ifndef MINERADIO_INSTALL_TITLE
+  !define MINERADIO_INSTALL_TITLE "Mineradio 安装"
+!endif
+!ifndef MINERADIO_INSTALL_NOTICE
+  !define MINERADIO_INSTALL_NOTICE ""
+!endif
 
 !ifndef BUILD_UNINSTALLER
   Var MineradioWelcomePage
@@ -63,7 +83,7 @@
   FileOpen $0 "$INSTDIR\${MINERADIO_INSTALL_MARKER}" w
   ${IfNot} ${Errors}
     FileWrite $0 "Mineradio install root$\r$\n"
-    FileWrite $0 "appId=com.mineradio.desktop$\r$\n"
+    FileWrite $0 "appId=${MINERADIO_MARKER_APP_ID}$\r$\n"
     FileClose $0
   ${EndIf}
 !macroend
@@ -260,77 +280,77 @@ Function MineradioUseFirstAvailableInstallDir
   IfFileExists "X:\*.*" driveX 0
   IfFileExists "Y:\*.*" driveY 0
   IfFileExists "Z:\*.*" driveZ 0
-  StrCpy $INSTDIR "C:\Mineradio"
+  StrCpy $INSTDIR "C:\${MINERADIO_INSTALL_DIR_NAME}"
   Return
 
   driveD:
-    StrCpy $INSTDIR "D:\Mineradio"
+    StrCpy $INSTDIR "D:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveE:
-    StrCpy $INSTDIR "E:\Mineradio"
+    StrCpy $INSTDIR "E:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveF:
-    StrCpy $INSTDIR "F:\Mineradio"
+    StrCpy $INSTDIR "F:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveG:
-    StrCpy $INSTDIR "G:\Mineradio"
+    StrCpy $INSTDIR "G:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveH:
-    StrCpy $INSTDIR "H:\Mineradio"
+    StrCpy $INSTDIR "H:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveI:
-    StrCpy $INSTDIR "I:\Mineradio"
+    StrCpy $INSTDIR "I:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveJ:
-    StrCpy $INSTDIR "J:\Mineradio"
+    StrCpy $INSTDIR "J:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveK:
-    StrCpy $INSTDIR "K:\Mineradio"
+    StrCpy $INSTDIR "K:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveL:
-    StrCpy $INSTDIR "L:\Mineradio"
+    StrCpy $INSTDIR "L:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveM:
-    StrCpy $INSTDIR "M:\Mineradio"
+    StrCpy $INSTDIR "M:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveN:
-    StrCpy $INSTDIR "N:\Mineradio"
+    StrCpy $INSTDIR "N:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveO:
-    StrCpy $INSTDIR "O:\Mineradio"
+    StrCpy $INSTDIR "O:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveP:
-    StrCpy $INSTDIR "P:\Mineradio"
+    StrCpy $INSTDIR "P:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveQ:
-    StrCpy $INSTDIR "Q:\Mineradio"
+    StrCpy $INSTDIR "Q:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveR:
-    StrCpy $INSTDIR "R:\Mineradio"
+    StrCpy $INSTDIR "R:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveS:
-    StrCpy $INSTDIR "S:\Mineradio"
+    StrCpy $INSTDIR "S:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveT:
-    StrCpy $INSTDIR "T:\Mineradio"
+    StrCpy $INSTDIR "T:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveU:
-    StrCpy $INSTDIR "U:\Mineradio"
+    StrCpy $INSTDIR "U:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveV:
-    StrCpy $INSTDIR "V:\Mineradio"
+    StrCpy $INSTDIR "V:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveW:
-    StrCpy $INSTDIR "W:\Mineradio"
+    StrCpy $INSTDIR "W:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveX:
-    StrCpy $INSTDIR "X:\Mineradio"
+    StrCpy $INSTDIR "X:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveY:
-    StrCpy $INSTDIR "Y:\Mineradio"
+    StrCpy $INSTDIR "Y:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
   driveZ:
-    StrCpy $INSTDIR "Z:\Mineradio"
+    StrCpy $INSTDIR "Z:\${MINERADIO_INSTALL_DIR_NAME}"
     Return
 FunctionEnd
 
@@ -371,27 +391,29 @@ Function MineradioNormalizeInstallDir
   Push "$0"
   Call MineradioTrimInstallDir
   Pop $0
+  StrLen $4 "${MINERADIO_INSTALL_DIR_NAME}"
   StrLen $1 "$0"
   ${If} $1 == 2
     StrCpy $2 "$0" 1 1
     ${If} $2 == ":"
-      StrCpy $0 "$0\Mineradio"
+      StrCpy $0 "$0\${MINERADIO_INSTALL_DIR_NAME}"
     ${EndIf}
   ${ElseIf} $1 == 3
     StrCpy $2 "$0" 1 1
     StrCpy $3 "$0" 1 2
     ${If} $2 == ":"
     ${AndIf} $3 == "\"
-      StrCpy $0 "$0Mineradio"
+      StrCpy $0 "$0${MINERADIO_INSTALL_DIR_NAME}"
     ${EndIf}
   ${EndIf}
 
   StrLen $1 "$0"
-  StrCpy $2 "$0" 10 -10
-  ${If} $1 < 10
-  ${OrIf} $2 != "\Mineradio"
-  ${AndIf} $2 != "\mineradio"
-    StrCpy $0 "$0\Mineradio"
+  IntOp $5 $4 + 1
+  StrCpy $2 "$0" $5 -$5
+  ${If} $1 < $5
+  ${OrIf} $2 != "\${MINERADIO_INSTALL_DIR_NAME}"
+  ${AndIf} $2 != "\${MINERADIO_INSTALL_DIR_NAME_LOWER}"
+    StrCpy $0 "$0\${MINERADIO_INSTALL_DIR_NAME}"
   ${EndIf}
   Exch $0
 FunctionEnd
@@ -749,10 +771,12 @@ Function MineradioValidateInstallDir
   ${EndIf}
 
   StrLen $0 "$INSTDIR"
-  StrCpy $1 "$INSTDIR" 10 -10
-  ${If} $0 < 10
-  ${OrIf} $1 != "\Mineradio"
-  ${AndIf} $1 != "\mineradio"
+  StrLen $2 "${MINERADIO_INSTALL_DIR_NAME}"
+  IntOp $2 $2 + 1
+  StrCpy $1 "$INSTDIR" $2 -$2
+  ${If} $0 < $2
+  ${OrIf} $1 != "\${MINERADIO_INSTALL_DIR_NAME}"
+  ${AndIf} $1 != "\${MINERADIO_INSTALL_DIR_NAME_LOWER}"
     MessageBox MB_ICONSTOP|MB_OK "安装目录必须是独立的 Mineradio 文件夹。请选择一个上级目录，安装器会自动创建 Mineradio 子文件夹。"
     Abort
   ${EndIf}
@@ -801,12 +825,12 @@ Function MineradioWelcomeShow
   CreateFont $MineradioBodyFont "Microsoft YaHei UI" 9 400
   CreateFont $MineradioSmallFont "Microsoft YaHei UI" 8 400
 
-  ${NSD_CreateLabel} 22u 20u 82u 10u "MINERADIO"
+  ${NSD_CreateLabel} 22u 20u 120u 10u "${MINERADIO_INSTALL_BRAND}"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioSmallFont 1
   SetCtlColors $0 "3257F7" "FFFFFF"
 
-  ${NSD_CreateLabel} 22u 42u 226u 30u "Mineradio 安装"
+  ${NSD_CreateLabel} 22u 42u 226u 30u "${MINERADIO_INSTALL_TITLE}"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioHeroFont 1
   SetCtlColors $0 "111217" "FFFFFF"
@@ -815,7 +839,7 @@ Function MineradioWelcomeShow
   Pop $0
   SetCtlColors $0 "" "3257F7"
 
-  ${NSD_CreateLabel} 22u 96u 238u 24u "为这台电脑安装 Mineradio。默认安装到 D:\Mineradio，下一步可以自由选择其它位置。"
+  ${NSD_CreateLabel} 22u 96u 238u 24u "为这台电脑安装 ${PRODUCT_NAME}。默认安装到 D:\${MINERADIO_INSTALL_DIR_NAME}，下一步可以自由选择其它位置。"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioBodyFont 1
   SetCtlColors $0 "4B5263" "FFFFFF"
@@ -825,11 +849,18 @@ Function MineradioWelcomeShow
   SendMessage $0 ${WM_SETFONT} $MineradioTitleFont 1
   SetCtlColors $0 "3257F7" "FFFFFF"
 
+  !ifdef MINERADIO_INTERNAL_BETA
+    ${NSD_CreateLabel} 22u 150u 238u 28u "${MINERADIO_INSTALL_NOTICE}"
+    Pop $0
+    SendMessage $0 ${WM_SETFONT} $MineradioSmallFont 1
+    SetCtlColors $0 "B42318" "FFFFFF"
+  !endif
+
   nsDialogs::Show
 FunctionEnd
 
 Function MineradioDirectoryBrowse
-  nsDialogs::SelectFolderDialog "选择 Mineradio 安装文件夹" "$INSTDIR"
+  nsDialogs::SelectFolderDialog "选择 ${PRODUCT_NAME} 安装文件夹" "$INSTDIR"
   Pop $0
   ${If} $0 != error
   ${AndIf} $0 != ""
@@ -880,7 +911,7 @@ Function MineradioDirectoryShow
   SendMessage $0 ${WM_SETFONT} $MineradioSmallFont 1
   ${NSD_OnClick} $0 MineradioDirectoryBrowse
 
-  ${NSD_CreateLabel} 22u 122u 238u 12u "默认推荐：D:\Mineradio；选盘符会自动建文件夹。"
+  ${NSD_CreateLabel} 22u 122u 238u 12u "默认推荐：D:\${MINERADIO_INSTALL_DIR_NAME}；选盘符会自动建文件夹。"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioSmallFont 1
   SetCtlColors $0 "6B7280" "FFFFFF"
@@ -924,27 +955,29 @@ Function un.MineradioNormalizeInstallDir
   Push "$0"
   Call un.MineradioTrimInstallDir
   Pop $0
+  StrLen $4 "${MINERADIO_INSTALL_DIR_NAME}"
   StrLen $1 "$0"
   ${If} $1 == 2
     StrCpy $2 "$0" 1 1
     ${If} $2 == ":"
-      StrCpy $0 "$0\Mineradio"
+      StrCpy $0 "$0\${MINERADIO_INSTALL_DIR_NAME}"
     ${EndIf}
   ${ElseIf} $1 == 3
     StrCpy $2 "$0" 1 1
     StrCpy $3 "$0" 1 2
     ${If} $2 == ":"
     ${AndIf} $3 == "\"
-      StrCpy $0 "$0Mineradio"
+      StrCpy $0 "$0${MINERADIO_INSTALL_DIR_NAME}"
     ${EndIf}
   ${EndIf}
 
   StrLen $1 "$0"
-  StrCpy $2 "$0" 10 -10
-  ${If} $1 < 10
-  ${OrIf} $2 != "\Mineradio"
-  ${AndIf} $2 != "\mineradio"
-    StrCpy $0 "$0\Mineradio"
+  IntOp $5 $4 + 1
+  StrCpy $2 "$0" $5 -$5
+  ${If} $1 < $5
+  ${OrIf} $2 != "\${MINERADIO_INSTALL_DIR_NAME}"
+  ${AndIf} $2 != "\${MINERADIO_INSTALL_DIR_NAME_LOWER}"
+    StrCpy $0 "$0\${MINERADIO_INSTALL_DIR_NAME}"
   ${EndIf}
   Exch $0
 FunctionEnd

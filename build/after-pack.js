@@ -44,6 +44,8 @@ module.exports = async function afterPack(context) {
   if (context.electronPlatformName !== 'win32') return;
 
   const appName = context.packager.appInfo.productFilename || 'Mineradio';
+  const productName = context.packager.appInfo.productName || appName;
+  const companyName = context.packager.appInfo.companyName || productName;
   const exePath = path.join(context.appOutDir, `${appName}.exe`);
   const iconPath = path.join(context.packager.info.buildResourcesDir, 'icon.ico');
   const rceditPath = resolveRcedit(context.packager.projectDir);
@@ -56,9 +58,9 @@ module.exports = async function afterPack(context) {
   execFileSync(rceditPath, [
     exePath,
     '--set-icon', iconPath,
-    '--set-version-string', 'FileDescription', 'Mineradio',
-    '--set-version-string', 'ProductName', 'Mineradio',
-    '--set-version-string', 'CompanyName', 'Mineradio',
+    '--set-version-string', 'FileDescription', productName,
+    '--set-version-string', 'ProductName', productName,
+    '--set-version-string', 'CompanyName', companyName,
     '--set-version-string', 'OriginalFilename', `${appName}.exe`,
     '--set-file-version', version,
     '--set-product-version', version

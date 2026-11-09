@@ -18,6 +18,28 @@ win-unpacked/
 # User data and private state
 .cookie
 .qq-cookie
+.kugou-cookie
+.kugou-vip-evidence.json
+.qishui-cookie
+.qishui-token
+.qishui-oauth.json
+.qishui-qr-identity.json
+.qishui-qr-login.json
+.spotify-credentials.json
+spotify-credentials.json
+.spotify-token.json
+spotify-token.json
+listen-sync-journal.json
+login-easter-egg.json
+login-easter-egg-state.json
+current-fx-autosave.json
+cache-settings.json
+desktop-behavior.json
+cuefield-feedback.jsonl
+startup-state.json
+Partitions/
+Network/
+Local State
 updates/
 backups/
 *.log
