@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer, clipboard, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('desktopWindow', {
   isDesktop: true,
   minimize: () => ipcRenderer.invoke('desktop-window-minimize'),
+  minimizeToTray: () => ipcRenderer.invoke('desktop-window-hide-to-tray'),
   restore: () => ipcRenderer.invoke('desktop-window-restore'),
   toggleMaximize: () => ipcRenderer.invoke('desktop-window-toggle-maximize'),
   toggleFullscreen: () => ipcRenderer.invoke('desktop-window-toggle-fullscreen'),

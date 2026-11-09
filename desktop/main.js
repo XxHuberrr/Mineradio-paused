@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, screen, session, globalShortcut, dialog, Tray, Menu, protocol, desktopCapturer, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, session, globalShortcut, dialog, Tray, Menu, nativeImage, protocol, desktopCapturer, powerMonitor } = require('electron');
 const net = require('net');
 const http = require('http');
 const path = require('path');
@@ -32,6 +32,7 @@ registerLocalMusicScheme(protocol);
 let mainWindow = null;
 let localServer = null;
 let mainServerPort = 0;
+let tray = null;
 let desktopLyricsWindow = null;
 let desktopLyricsState = {};
 let desktopLyricsUserBounds = null;
@@ -69,7 +70,6 @@ let appQuitting = false;
 let appQuitCleanupPromise = null;
 let appQuitCleanupComplete = false;
 let mainWindowCloseFlushArmed = false;
-let tray = null;
 let startupCompleted = false;
 let startupErrorReported = false;
 let localServerStartPromise = null;
@@ -482,6 +482,7 @@ const CHROMIUM_SAFE_PERFORMANCE_SWITCHES = [
   ['enable-zero-copy'],
   ['enable-accelerated-2d-canvas'],
   ['use-angle', 'd3d11'],
+  ['disk-cache-size', String(150 * 1024 * 1024)],
 ];
 const CHROMIUM_OPT_IN_PERFORMANCE_SWITCHES = [
   ['ignore-gpu-blocklist', null, 'MINERADIO_IGNORE_GPU_BLOCKLIST'],
@@ -3949,6 +3950,13 @@ ipcMain.handle('desktop-window-restore', async (event) => {
   try { win.focus(); } catch (_) { }
   sendWindowState(win);
   return getWindowState(win);
+});
+
+ipcMain.handle('desktop-window-hide-to-tray', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  createOrUpdateTray();
+  mainWindow.hide();
+  sendWindowState(mainWindow);
 });
 
 ipcMain.handle('desktop-window-toggle-maximize', (event) => {

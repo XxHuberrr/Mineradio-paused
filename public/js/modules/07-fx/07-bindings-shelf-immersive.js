@@ -749,4 +749,12 @@ async function setCamMode(m) {
 }
 
 // ============================================================
-//  更新提示预览
+//  视觉控制台悬浮按钮点击 (body onclick 唯一直呼)
+// ============================================================
+function onFxFabClick(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  if (!diyPlayerMode) { showToast(window.t ? window.t('toast.diyRequired') : '请先开启 DIY 播放器模式'); return; }
+  var el = document.getElementById('fx-panel');
+  var open = el && (el.classList.contains('peek') || el.classList.contains('show'));
+  toggleFxPanel(!open);
+}
