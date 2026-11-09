@@ -149,3 +149,77 @@ window.addEventListener('DOMContentLoaded', () => {
   document.documentElement.classList.add('desktop-shell-root');
   document.body.classList.add('desktop-shell');
 });
+window.addEventListener('DOMContentLoaded', () => {
+    let audioEl = null;
+    let pollTimer = null;
+    let metaUpdateTimer = null;
+    let lastTitle = '';
+    let lastArtist = '';
+    let lastArtwork = '';
+
+    pollTimer = setInterval(() => {
+        audioEl = document.querySelector('audio');
+        if (!audioEl) return;
+        clearInterval(pollTimer);
+
+        audioEl.addEventListener('play', () => {
+            if (!navigator.mediaSession) return;
+            navigator.mediaSession.playbackState = 'playing';
+        });
+
+        audioEl.addEventListener('pause', () => {
+            if (!navigator.mediaSession) return;
+            navigator.mediaSession.playbackState = 'paused';
+        });
+
+        if (navigator.mediaSession) {
+            navigator.mediaSession.setActionHandler('previoustrack', () => {
+                document.querySelector('.btn-prev')?.click();
+            });
+            navigator.mediaSession.setActionHandler('nexttrack', () => {
+                document.querySelector('.btn-next')?.click();
+            });
+            navigator.mediaSession.setActionHandler('play', () => {
+                document.querySelector('.btn-play')?.click();
+            });
+            navigator.mediaSession.setActionHandler('pause', () => {
+                document.querySelector('.btn-play')?.click();
+            });
+        }
+
+        metaUpdateTimer = setInterval(() => {
+            if (!navigator.mediaSession) return;
+
+            const titleEl = document.querySelector('.player-song-title');
+            const artistEl = document.querySelector('.player-song-artist');
+            const coverEl = document.querySelector('.player-cover img');
+
+            const title = titleEl?.textContent?.trim() || '';
+            const artist = artistEl?.textContent?.trim() || '';
+            let coverSrc = coverEl?.src || '';
+
+            if (title === lastTitle && artist === lastArtist && coverSrc === lastArtwork) {
+                return;
+            }
+            lastTitle = title;
+            lastArtist = artist;
+            lastArtwork = coverSrc;
+
+            if (title) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: title,
+                    artist: artist,
+                    artwork: coverSrc
+                        ? [{ src: coverSrc, sizes: '512x512', type: 'image/jpeg' }]
+                        : []
+                });
+            }
+        }, 800);
+
+    }, 400);
+
+    window.addEventListener('beforeunload', () => {
+        pollTimer && clearInterval(pollTimer);
+        metaUpdateTimer && clearInterval(metaUpdateTimer);
+    });
+});
