@@ -1,5 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, screen, session, globalShortcut, dialog, Tray, Menu, nativeImage } = require('electron');
-const { app, BrowserWindow, ipcMain, shell, screen, session, globalShortcut, dialog, Tray, Menu, protocol, desktopCapturer, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, session, globalShortcut, dialog, Tray, Menu, nativeImage, protocol, desktopCapturer, powerMonitor } = require('electron');
 const net = require('net');
 const http = require('http');
 const path = require('path');
@@ -34,7 +33,6 @@ let mainWindow = null;
 let localServer = null;
 let mainServerPort = 0;
 let tray = null;
-let isQuitting = false;
 let desktopLyricsWindow = null;
 let desktopLyricsState = {};
 let desktopLyricsUserBounds = null;
@@ -72,7 +70,6 @@ let appQuitting = false;
 let appQuitCleanupPromise = null;
 let appQuitCleanupComplete = false;
 let mainWindowCloseFlushArmed = false;
-let tray = null;
 let startupCompleted = false;
 let startupErrorReported = false;
 let localServerStartPromise = null;
@@ -2110,57 +2107,6 @@ function focusMainWindow() {
   return true;
 }
 
-function showMainWindowFromTray() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
-  sendWindowState(mainWindow);
-}
-
-function ensureTray() {
-  if (tray && !tray.isDestroyed()) return tray;
-  let trayImage = null;
-  try {
-    if (fs.existsSync(APP_ICON_ICO)) trayImage = nativeImage.createFromPath(APP_ICON_ICO);
-  } catch (e) {
-    trayImage = null;
-  }
-  if (!trayImage || trayImage.isEmpty()) trayImage = nativeImage.createEmpty();
-  tray = new Tray(trayImage);
-  tray.setToolTip(APP_NAME);
-  const contextMenu = Menu.buildFromTemplate([
-    { label: '显示 Mineradio', click: () => showMainWindowFromTray() },
-    { type: 'separator' },
-    {
-      label: '退出',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      },
-    },
-  ]);
-  tray.setContextMenu(contextMenu);
-  tray.on('click', () => showMainWindowFromTray());
-  tray.on('double-click', () => showMainWindowFromTray());
-  return tray;
-}
-
-function destroyTray() {
-  if (tray && !tray.isDestroyed()) {
-    try { tray.destroy(); } catch (e) {}
-  }
-  tray = null;
-}
-
-function hideMainWindowToTray() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  ensureTray();
-  mainWindow.hide();
-  sendWindowState(mainWindow);
-}
-
-
 function createOrUpdateTray() {
   if (process.platform !== 'win32' && process.platform !== 'linux') return;
   if (!tray) {
@@ -4007,7 +3953,10 @@ ipcMain.handle('desktop-window-restore', async (event) => {
 });
 
 ipcMain.handle('desktop-window-hide-to-tray', () => {
-  hideMainWindowToTray();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  createOrUpdateTray();
+  mainWindow.hide();
+  sendWindowState(mainWindow);
 });
 
 ipcMain.handle('desktop-window-toggle-maximize', (event) => {
@@ -6040,11 +5989,8 @@ if (!gotSingleInstanceLock) {
     wallpaperEngineLibrary.dispose();
     stopMemoryAutoTimer();
     unregisterFullDesktopEscapeShortcut();
-  app.on('before-quit', () => {
-    isQuitting = true;
     unregisterMineradioGlobalHotkeys();
     closeDesktopLyricsWindow();
-    destroyTray();
     if (localServer && localServer.close) localServer.close();
     if (tray) {
       try { tray.destroy(); } catch (e) {}

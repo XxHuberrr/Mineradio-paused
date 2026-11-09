@@ -18574,3 +18574,15 @@ body.desktop-shell.desktop-wallpaper-mode.diy-mode #bottom-bar.stage-mode {
     width: calc(100vw - var(--desktop-safe-left) - var(--desktop-safe-right) - 24px);
   }
 }
+
+/* ============================================================
+   合并整合补充: 来自上游 1.1.x 内联样式、index.css 缺失的选择器
+   ============================================================ */
+body.custom-background-override.custom-background-flat #custom-bg::after{opacity:0!important}
+body.diy-mode #quality-control{display:none!important}
+html.control-glass-svg-ok #search-box{backdrop-filter:url(#mineradio-search-box-glass-filter) saturate(1)!important;
+  -webkit-backdrop-filter:url(#mineradio-search-box-glass-filter) saturate(1)!important;}
+html.control-glass-svg-ok .search-mode-tabs{backdrop-filter:blur(22px) saturate(1.16)!important;
+  -webkit-backdrop-filter:blur(22px) saturate(1.16)!important;}
+html.control-glass-svg-ok .top-account-pill{backdrop-filter:var(--saved-button-glass-svg-filter)!important;
+  -webkit-backdrop-filter:var(--saved-button-glass-svg-filter)!important;}

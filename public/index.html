@@ -2996,12 +2996,6 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
         <button data-performance-background="keep" data-i18n="settings.bgKeep">保持运行</button>
         <button data-performance-background="release" data-i18n="settings.bgRelease">停止释放</button>
       </div>
-      <div class="fx-section-label" data-i18n="settings.closeAction">关闭按钮行为</div>
-      <div class="fx-seg" id="close-action-seg" data-i18n-title="seg.closeActionTitle" title="点击右上角关闭按钮时的行为">
-        <button data-close-action="ask" data-i18n="settings.closeAsk">每次询问</button>
-        <button data-close-action="minimize" data-i18n="settings.closeMinimize">最小化到托盘</button>
-        <button data-close-action="exit" data-i18n="settings.closeExit">直接退出</button>
-          </div>
           <div class="fx-section-label">关闭窗口</div>
           <div class="fx-seg" id="close-behavior-seg" title="点击右上角关闭按钮时的行为">
             <button data-close-behavior="exit">直接退出</button>
@@ -3806,21 +3800,6 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
     </div>
   </div>
 </div>
-
-<div id="close-confirm-modal" class="modal-mask">
-  <div class="modal close-confirm-modal">
-    <h2 data-i18n="closeConfirm.title">关闭 Mineradio</h2>
-    <p class="close-confirm-desc" data-i18n="closeConfirm.desc">你想最小化到系统托盘继续后台播放，还是直接退出程序？</p>
-    <label class="close-confirm-remember">
-      <input id="close-confirm-remember" type="checkbox">
-      <span data-i18n="closeConfirm.remember">记住我的选择，下次不再询问</span>
-    </label>
-    <div class="btn-row">
-      <button class="modal-btn" type="button" onclick="resolveDesktopClose('exit')" data-i18n="closeConfirm.exit">直接退出</button>
-      <button class="modal-btn primary" type="button" onclick="resolveDesktopClose('minimize')" data-i18n="closeConfirm.minimize">最小化到托盘</button>
-        </div>
-      </div>
-    </div>
 
     <div id="local-beat-modal" class="modal-mask">
       <div class="modal local-beat-modal">
