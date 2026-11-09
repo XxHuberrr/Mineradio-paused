@@ -281,7 +281,6 @@ var FX_CONSOLE_LAYOUT = [
         fxConsoleItem('t-memoryAutoTrimApp', '自动压缩播放器', '内存 压缩 Electron'),
         fxConsoleItem('t-memoryAutoTrimOnBackground', '后台触发压缩', '最小化内存'),
         fxConsoleItem('t-memoryAutoSystemTrim', '系统级定时释放', 'Mem Reduct 自动'),
-        fxConsoleItem('t-memorySystemAutoElevate', '需要时请求管理员', 'UAC 提权'),
         fxConsoleItem('memory-mask-seg', '系统释放范围', '工作集 修改页 待机页'),
         fxConsoleItem('fx-memory-interval', '定时释放', '分钟 间隔'),
         fxConsoleItem('fx-memory-threshold', '占用阈值', '内存百分比'),

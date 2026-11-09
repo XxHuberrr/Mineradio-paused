@@ -8,7 +8,7 @@ var MEMORY_REDUCT_MASK_DEFAULT = 29;
 var memorySnapshotTimer = 0;
 var memoryLastSnapshotAt = 0;
 var memoryLastStatusPayload = null;
-var MEMORY_SAFE_REVISION = 3;
+var MEMORY_SAFE_REVISION = 4;
 
 function normalizeMemorySystemMask(mask) {
   var value = Math.round(Number(mask) || MEMORY_REDUCT_MASK_DEFAULT) & MEMORY_REDUCT_MASK_DEFAULT;
@@ -20,6 +20,7 @@ function ensureMemoryFxDefaults() {
   if (fx.memoryAutoTrimApp !== false) fx.memoryAutoTrimApp = true;
   if (fx.memoryAutoTrimOnBackground !== false) fx.memoryAutoTrimOnBackground = true;
   if (fx.memorySafetyRevision !== MEMORY_SAFE_REVISION) {
+    fx.memorySystemAutoElevate = false;
     fx.memorySafetyRevision = MEMORY_SAFE_REVISION;
   }
   fx.memoryAutoSystemTrim = fx.memoryAutoSystemTrim === true;
@@ -111,22 +112,20 @@ function updateMemoryControls() {
   [
     ['memoryAutoTrimApp', 't-memoryAutoTrimApp'],
     ['memoryAutoTrimOnBackground', 't-memoryAutoTrimOnBackground'],
-    ['memoryAutoSystemTrim', 't-memoryAutoSystemTrim'],
-    ['memorySystemAutoElevate', 't-memorySystemAutoElevate']
+    ['memoryAutoSystemTrim', 't-memoryAutoSystemTrim']
   ].forEach(function (pair) {
     var el = document.getElementById(pair[1]);
     if (el) el.classList.toggle('on', !!fx[pair[0]]);
   });
   var systemAvailable = !memoryLastStatusPayload || memoryLastStatusPayload.systemPurgeAvailable !== false;
-  ['t-memoryAutoSystemTrim', 't-memorySystemAutoElevate'].forEach(function (id) {
-    var el = document.getElementById(id);
-    if (!el) return;
-    el.classList.remove('dev-locked');
-    el.setAttribute('aria-disabled', 'false');
-    el.title = systemAvailable
-      ? 'Mem Reduct will run only after Mineradio is hidden/minimized and threshold/interval allow it.'
+  var autoSystemTrimEl = document.getElementById('t-memoryAutoSystemTrim');
+  if (autoSystemTrimEl) {
+    autoSystemTrimEl.classList.remove('dev-locked');
+    autoSystemTrimEl.setAttribute('aria-disabled', 'false');
+    autoSystemTrimEl.title = systemAvailable
+      ? 'Mem Reduct will run only after Mineradio is hidden/minimized and threshold/interval allow it; automatic cleanup stays un-elevated.'
       : 'System-level Mem Reduct is not confirmed by the desktop process yet; app trim remains active.';
-  });
+  }
   document.querySelectorAll('#memory-mask-seg [data-memory-mask]').forEach(function (btn) {
     var bit = MEMORY_REDUCT_MASK_BITS[btn.getAttribute('data-memory-mask')] || 0;
     btn.classList.toggle('active', !!(normalizeMemorySystemMask(fx.memorySystemMask) & bit));

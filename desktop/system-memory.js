@@ -397,7 +397,8 @@ async function purgeSystemMemorySmart(mask, options) {
   options = options || {};
   if (!SYSTEM_PURGE_AVAILABLE) return purgeSystemMemory(mask, options);
   if (!SYSTEM_PURGE_ENABLED && options.manual !== true) return purgeSystemMemory(mask, options);
-  const autoElevate = options.autoElevate === true;
+  // Background cleanup must never trigger UAC; elevation is reserved for explicit manual actions.
+  const autoElevate = options.manual === true && options.autoElevate === true;
   const elevated = await isProcessElevated();
   if (autoElevate && !elevated) return purgeSystemMemoryElevated(mask, options);
   return purgeSystemMemory(mask, options);

@@ -432,7 +432,7 @@ function normalizeFxArchiveSnapshot(raw) {
     memorySystemIntervalMin: archiveNumber(raw, 'memorySystemIntervalMin', fxDefaults.memorySystemIntervalMin, 5, 180),
     memorySystemThresholdPercent: archiveNumber(raw, 'memorySystemThresholdPercent', fxDefaults.memorySystemThresholdPercent, 50, 98),
     memorySystemMask: archiveNumber(raw, 'memorySystemMask', fxDefaults.memorySystemMask, 1, 29),
-    memorySafetyRevision: fxDefaults.memorySafetyRevision,
+    memorySafetyRevision: Number(raw.memorySafetyRevision) || 0,
     liveBackgroundKeep: normalizePerformanceBackgroundMode(raw.performanceBackground, raw.liveBackgroundKeep === true) === 'keep',
     sonicGroundAmplitude: archiveNumber(raw, 'sonicGroundAmplitude', fxDefaults.sonicGroundAmplitude, 0, 100),
     sonicGroundMotionSpeed: archiveNumber(raw, 'sonicGroundMotionSpeed', fxDefaults.sonicGroundMotionSpeed, 0, 100),

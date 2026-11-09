@@ -5591,7 +5591,7 @@ function checkFirstLaunchDefaultsAndSplashGuard() {
     performanceBackground: 'release',
     performanceQuality: 'eco',
     memoryAutoSystemTrim: true,
-    memorySystemAutoElevate: true,
+    memorySystemAutoElevate: false,
     wallpaperFps: 60,
     shelfCameraMode: 'dynamic',
     shelfPresence: 'auto'
