@@ -18574,3 +18574,19 @@ body.desktop-shell.desktop-wallpaper-mode.diy-mode #bottom-bar.stage-mode {
     width: calc(100vw - var(--desktop-safe-left) - var(--desktop-safe-right) - 24px);
   }
 }
+/* 花再 Halo PixelBar 同步面板 */
+#halo-sync-btn { font-size: 15px; line-height: 1; }
+.halo-sync-panel {
+  position: absolute; top: 44px; right: 8px; width: 244px; z-index: 9999;
+  background: rgba(18,20,28,0.96); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px; padding: 12px; color: #e8edf3; display: none;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45); font-size: 12px; backdrop-filter: blur(8px);
+}
+.halo-sync-panel.show { display: block; }
+.halo-sync-title { font-weight: 600; margin-bottom: 8px; font-size: 13px; }
+.halo-sync-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+.halo-sync-row label { opacity: 0.86; }
+.halo-sync-row select { background: #11141c; color: #e8edf3; border: 1px solid rgba(255,255,255,0.16); border-radius: 6px; padding: 2px 4px; }
+.halo-sync-status { margin-top: 6px; opacity: 0.7; min-height: 14px; font-size: 11px; }
+.halo-sync-mini-btn { margin-top: 6px; width: 100%; background: #2a2f3c; color: #e8edf3; border: 1px solid rgba(255,255,255,0.16); border-radius: 6px; padding: 5px; cursor: pointer; }
+.halo-sync-mini-btn:hover { background: #353b4a; }

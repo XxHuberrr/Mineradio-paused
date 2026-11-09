@@ -143,6 +143,23 @@ contextBridge.exposeInMainWorld('desktopWindow', {
     ipcRenderer.on('desktop-window-state', listener);
     return () => ipcRenderer.removeListener('desktop-window-state', listener);
   },
+  halo: {
+    getConfig: () => ipcRenderer.invoke('halo-sync-get-config'),
+    setConfig: (patch) => ipcRenderer.invoke('halo-sync-set-config', patch || {}),
+    setEnabled: (enabled) => ipcRenderer.invoke('halo-sync-set-enabled', enabled),
+    connect: () => ipcRenderer.invoke('halo-sync-connect'),
+    listDevices: () => ipcRenderer.invoke('halo-sync-list-devices'),
+    lyric: (text) => ipcRenderer.send('halo-sync-lyric', text),
+    audioFrame: (energy, beat, brightness) => ipcRenderer.send('halo-sync-audio-frame', energy, beat, brightness),
+    volume: (v) => ipcRenderer.send('halo-sync-volume', v),
+    playState: (playing) => ipcRenderer.send('halo-sync-play-state', playing),
+    song: (name, artist) => ipcRenderer.send('halo-sync-song', name, artist),
+    coverColor: (rgb) => ipcRenderer.send('halo-sync-cover-color', rgb),
+    scene: (name) => ipcRenderer.send('halo-sync-scene', name),
+    spectrum: (style) => ipcRenderer.send('halo-sync-spectrum', style),
+    clockStyle: (style) => ipcRenderer.send('halo-sync-clock-style', style),
+    manualHold: (on) => ipcRenderer.send('halo-sync-manual-hold', on),
+  },
 });
 
 window.addEventListener('DOMContentLoaded', () => {

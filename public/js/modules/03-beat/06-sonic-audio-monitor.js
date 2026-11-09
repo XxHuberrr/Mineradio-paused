@@ -604,6 +604,7 @@ function stepSonicAudioMonitor(rawData, dt, opts) {
   }, smooth, beatData, triggerData);
   frame.kickEnvelope = kickEnvelope;
   sonicAudioMonitorState.frame = frame;
+  if (window.haloSync) window.haloSync.onAudioFrame(frame);
   return frame;
 }
 

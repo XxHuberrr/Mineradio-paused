@@ -508,6 +508,7 @@ function updateLyricPaletteFromCover(coverCanvas) {
       palette.secondary,
       palette.highlight
     ].forEach(function (color) { lyricCoverPushUniqueColor(palette.coverColors, color); });
+    if (window.haloSync) window.haloSync.onCoverColors(palette.coverColors);
     stageLyrics.coverPalette = palette;
     if (fx.lyricColorMode !== 'custom') setStageLyricPalette(stageLyrics.coverPalette);
     if (typeof updateSonicGroundColorControls === 'function') updateSonicGroundColorControls();

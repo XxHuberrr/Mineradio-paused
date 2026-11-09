@@ -4976,6 +4976,60 @@ ipcMain.handle('mineradio-desktop-lyrics-move-by', async (_event, dx, dy) => {
   }
 });
 
+// ===================== 花再 Halo PixelBar 歌词/灯光同步 =====================
+let haloSyncInstance = null;
+app.on('before-quit', () => {
+  const h = getHaloSync();
+  if (h && typeof h.dispose === 'function') h.dispose();
+});
+function getHaloSync() {
+  if (!haloSyncInstance) {
+    try {
+      const path = require('path');
+      const { HaloSync } = require('./halo-lyric-sync');
+      const userData = (app && typeof app.getPath === 'function') ? app.getPath('userData') : path.join(__dirname, '..');
+      haloSyncInstance = new HaloSync(path.join(userData, 'halo-sync.json'));
+    } catch (e) {
+      console.warn('[HaloSync] 初始化失败:', e.message);
+      return null;
+    }
+  }
+  return haloSyncInstance;
+}
+
+ipcMain.handle('halo-sync-get-config', async () => {
+  const h = getHaloSync();
+  return { ok: !!h, config: h ? h.getConfig() : null };
+});
+ipcMain.handle('halo-sync-set-config', async (_event, patch) => {
+  const h = getHaloSync();
+  if (!h) return { ok: false };
+  return { ok: true, config: h.setConfig(patch || {}) };
+});
+ipcMain.handle('halo-sync-set-enabled', async (_event, enabled) => {
+  const h = getHaloSync();
+  if (!h) return { ok: false };
+  return { ok: true, enabled: h.setEnabled(enabled) };
+});
+ipcMain.handle('halo-sync-list-devices', async () => {
+  const h = getHaloSync();
+  return { ok: !!h, devices: h ? await h.listDevices() : [], connected: h ? h.connected : false };
+});
+ipcMain.handle('halo-sync-connect', async () => {
+  const h = getHaloSync();
+  return { ok: !!h, connected: h ? await h.connect() : false };
+});
+ipcMain.on('halo-sync-lyric', (event, text) => { const h = getHaloSync(); if (h) h.onLyric(text); });
+ipcMain.on('halo-sync-audio-frame', (event, energy, beat, brightness) => { const h = getHaloSync(); if (h) h.onAudioFrame(energy, beat, brightness); });
+ipcMain.on('halo-sync-volume', (event, v) => { const h = getHaloSync(); if (h) h.onVolume01(v); });
+ipcMain.on('halo-sync-play-state', (event, playing) => { const h = getHaloSync(); if (h) h.onPlayState(playing); });
+ipcMain.on('halo-sync-song', (event, name, artist) => { const h = getHaloSync(); if (h) h.onSong(name, artist); });
+ipcMain.on('halo-sync-cover-color', (event, rgb) => { const h = getHaloSync(); if (h) h.onCoverColor(rgb); });
+ipcMain.on('halo-sync-scene', (event, name) => { const h = getHaloSync(); if (h) h.sendTheme(name); });
+ipcMain.on('halo-sync-spectrum', (event, style) => { const h = getHaloSync(); if (h) h.sendSpectrum(style); });
+ipcMain.on('halo-sync-clock-style', (event, style) => { const h = getHaloSync(); if (h) h.sendClockStyle(style); });
+ipcMain.on('halo-sync-manual-hold', (event, on) => { const h = getHaloSync(); if (h) h.setManualHold(on); });
+
 ipcMain.handle('mineradio-wallpaper-set-enabled', async (event, enabled, payload) => {
   try {
     if (!isTrustedMainWindowIpc(event)) return { ok: false, enabled: false, error: 'WALLPAPER_UNTRUSTED_SENDER' };
@@ -5940,6 +5994,12 @@ if (!gotSingleInstanceLock) {
       await wallpaperEngineLibrary.installProtocol(protocol);
     } catch (error) {
       console.warn('[Wallpaper Engine] local media protocol unavailable:', error && error.message || error);
+    }
+    try {
+      const h = getHaloSync();
+      if (h && h.config.enabled) h.connect().catch(() => {});
+    } catch (error) {
+      console.warn('[HaloSync] 启动时连接失败:', error && error.message || error);
     }
     const handleDisplayLayoutChanged = (_event, _display, changedMetrics) => {
       positionDesktopLyricsWindow();

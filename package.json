@@ -9,6 +9,7 @@
   "private": true,
   "scripts": {
     "start": "electron .",
+    "rebuild": "electron-rebuild -f -w node-hid",
     "build:win": "electron-builder --win nsis",
     "build:win:dir": "electron-builder --win dir",
     "build:win:internal-beta": "electron-builder --config electron-builder.internal-beta.json --win nsis --publish never"
@@ -16,14 +17,13 @@
   "build": {
     "appId": "com.mineradio.desktop",
     "productName": "Mineradio",
+    "npmRebuild": false,
+    "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "dist",
       "buildResources": "build"
     },
     "afterPack": "build/after-pack.js",
-    "toolsets": {
-      "winCodeSign": "1.1.0"
-    },
     "files": [
       "desktop/**/*",
       "public/**/*",
@@ -101,6 +101,7 @@
     "mpg123-decoder": "^1.0.3",
     "music-metadata": "11.14.0",
     "NeteaseCloudMusicApi": "^4.32.0",
+    "node-hid": "^3.4.0",
     "qrcode": "^1.5.4"
   },
   "overrides": {
@@ -109,6 +110,7 @@
     "music-metadata": "11.14.0"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
     "electron": "^42.4.1",
     "electron-builder": "^26.15.3",
     "rcedit": "^5.0.2"

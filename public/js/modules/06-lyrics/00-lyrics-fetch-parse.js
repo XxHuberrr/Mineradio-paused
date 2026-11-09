@@ -104,7 +104,7 @@ async function runQueueLyricPrefetch(fromIndex, token) {
     var response = await apiJson(lyricEndpointForSong(candidate.song));
     if (token !== lyricQueuePrefetchToken) return false;
     var merged = mergeInlineLyricResponseForSong(candidate.song, response || {});
-    var state = parseLyricResponseToOriginalState(candidate.song, merged);
+    var state = parseLyricResponseToOriginalState(candidate.song, merged, { skipHalo: true });
     if (!state || !state.usableLyric) return false;
     writePersistentLyricCache(candidate.song, merged);
     return true;
@@ -270,7 +270,7 @@ function withLyricFallbackForSong(song, lines) {
   var text = lyricFallbackTextForSong(song);
   return text ? [{ t: 0, text: text, duration: 9999, charCount: Math.max(1, text.length), fallback: true }] : [];
 }
-function parseLyricResponseToOriginalState(song, response) {
+function parseLyricResponseToOriginalState(song, response, opts) {
   response = response || {};
   var nativeLines = parseYrcText(response.yrc || '');
   var lrcLines = parseLyricText(response.lyric || '');
@@ -281,6 +281,7 @@ function parseLyricResponseToOriginalState(song, response) {
   var primaryLines = nativeLines.length ? nativeLines : lrcLines;
   var lines = withLyricFallbackForSong(song, attachLyricTranslations(primaryLines, translationLines));
   if (lines.length && lines[0].fallback) timingSource = 'fallback';
+  if (window.haloSync && !(opts && opts.skipHalo)) window.haloSync.setLyricContext(song, lines);
   return {
     lines: cloneLyricLines(lines),
     hasNativeKaraoke: hasNativeKaraoke,

@@ -614,6 +614,7 @@ function setVolume(value, silent) {
   applyVolumeToAudio({ restoreEnvelope: shouldRestoreAudibleEnvelope });
   updateVolumeUi();
   if (!silent) showToast('音量 ' + Math.round(next * 100) + '%');
+  if (window.haloSync) window.haloSync.onVolume(next);
 }
 function adjustVolumeByKeyboard(delta) {
   var step = Number(delta) || 0;
