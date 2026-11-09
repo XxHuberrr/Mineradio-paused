@@ -1,10 +1,36 @@
 # Mineradio
 
+## 🌐 Mineradio 官网：[mineradio.cn](https://mineradio.cn/)
+
+> [!IMPORTANT]
+> **Mineradio 官网：<https://mineradio.cn/>**
+>
+> 请收藏官网，从官网进入下载页，避免误入同名网站或第三方下载页。
+> [官网下载入口](https://mineradio.cn/download.html) · [官网链接的网页版：mineradio.art](https://mineradio.art/)
+
 > **项目状态：长期停更**
 >
 > 目前因个人原因，Mineradio 项目处于长期停更状态。感兴趣的个人玩家可随意使用本项目进行创作，也可以自行修改和修复 bug。希望各位玩得开心，也希望世界和平，享受我们的音乐。
 >
 > 本仓库保留公开源码、历史版本和下载说明，方便个人玩家 Fork、建立分支或制作二创版本。
+
+## 认准官网，避免走错下载页
+
+> [!WARNING]
+> **搜索结果标题中的“官网”“官方版”“最新版”，不代表该页面就是 Mineradio 官网。**
+> 请检查地址栏，认准 **`mineradio.cn`**；安装包与网盘链接请从[官网下载页](https://mineradio.cn/download.html)进入。
+
+以下是容易混淆的**第三方介绍 / 下载页面示例，并非 Mineradio 官网**。仅供辨识，不作为下载推荐。核查日期：**2026-11-09**。
+
+| 非官网页面 | 页面上的字样或信息 | 如何辨识 |
+| --- | --- | --- |
+| `shouyou.3dmgame.com` · [3DM 页面](https://shouyou.3dmgame.com/android/555111.html) | 标题为“Mineradio 官方版”，列出的版本为 `1.12`。 | 这是 3DM 的软件下载页；“官方版”字样不能证明页面由 Mineradio 官方运营。 |
+| `cr173.com` · [西西页面](https://www.cr173.com/soft/1670750.html) | 标题为“Mineradio音乐软件官方版”，其“官方网站”字段另行指向 `mineradio.cn`。 | 软件站页面与它引用的官网是两个不同入口，请进入官网获取下载信息。 |
+| `5577.com` · [5577 页面](https://www.5577.com/s/735837.html) | 标题含“最新版官方”，其“应用官网”字段指向 `mineradio.cn`。 | 不要仅凭“最新版”字样选包；请以官网下载页公布的版本与链接为准。 |
+
+以上仅核对页面信息，未检测这些站点的安装包，不据此认定其为盗版、改包或恶意软件。社区 Fork、二创和转载也不因“非官网”身份自动成为盗版。
+
+---
 
 ![Mineradio 暗场启动页](./docs/assets/readme/cinema-beat-smoke.png)
 
