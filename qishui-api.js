@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const http = require('http');
 const https = require('https');
 const path = require('path');
+const macPlayback = require('./desktop/qishui-native-playback');
 
 const QISHUI_API_BASE = (process.env.QISHUI_API_BASE || 'https://open.douyin.com').replace(/\/+$/, '');
 const QISHUI_RELATED_MEDIA_PATH = '/api/luna/v1/platform/feed/related-media/';
@@ -3269,6 +3270,15 @@ async function fetchQishuiPcTrackV2(trackId, cookieText) {
   const cookie = normalizeQishuiCookieInput(cookieText);
   const cacheKey = 'track-v2-meta|' + qishuiCookieFingerprint(cookie) + '|' + normalizeText(trackId);
   return qishuiTrackMetadataCache.wrap(cacheKey, 20 * 1000, async () => {
+    const nativeRequest = await macPlayback.prepareTrackRequest(trackId, qishuiSessionCookieHeader(cookie));
+    if (nativeRequest) {
+      const json = await requestJson(nativeRequest.url, {
+        method: 'POST', timeoutMs: 3000, headers: nativeRequest.headers,
+      }, nativeRequest.body);
+      const error = qishuiPcStatusError(json, 'QISHUI_MAC_TRACK_FAILED');
+      if (error) throw error;
+      return json;
+    }
     try {
       return await fetchQishuiPcTrackV2Post(trackId, cookie);
     } catch (postError) {
