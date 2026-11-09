@@ -19,6 +19,19 @@
 > [!WARNING]
 > **搜索结果标题中的“官网”“官方版”“最新版”，不代表该页面就是 Mineradio 官网。**
 > 请检查地址栏，认准 **`mineradio.cn`**；安装包与网盘链接请从[官网下载页](https://mineradio.cn/download.html)进入。
+> **已确认冒充官方入口的域名：`mineradiobfq.cn`。请勿误入。**
+
+### 仿冒官网 / 官方入口：请勿误入
+
+**`mineradiobfq.cn` 不是 Mineradio 官网。请勿从该站下载安装包、提交账号信息或付款；请认准 [mineradio.cn](https://mineradio.cn/)。**
+
+| 仿冒域名（仅供辨识） | 已核查的冒充方式 | 正确入口 |
+| --- | --- | --- |
+| `mineradiobfq.cn` | 页面使用 Mineradio 名称、MR 标识和产品截图；页脚自称“Mineradio官方入口与使用指南站点”，并提供该站自己的网盘下载入口。 | [Mineradio 官网](https://mineradio.cn/) · [官网下载页](https://mineradio.cn/download.html) |
+
+核查日期：**2026-11-09**。以上判定针对“冒充官方身份”，未检测该站安装包，不据此声称其含有恶意程序。域名以纯文本展示，避免误点；同名、相似拼写或加上 `bfq` 等后缀，都不代表官方身份。官网链接的网页版 `mineradio.art` 不在此名单内。
+
+### 第三方软件下载页：认清页面归属
 
 以下是容易混淆的**第三方介绍 / 下载页面示例，并非 Mineradio 官网**。仅供辨识，不作为下载推荐。核查日期：**2026-11-09**。
 
