@@ -74,12 +74,21 @@ function resetPlaybackAudioGraphForSourceSwitch(reason) {
   var previousSourceMedia = audioSourceMedia;
   var sourceUsesCapture = !!(source && source.__mineradioUsesCapture);
   var mediaElementChanged = !!(source && previousSourceMedia && previousSourceMedia !== audio);
-  // Chromium can permanently freeze the media clock when an element that was
-  // once bound to MediaElementSource is later kept on captureStream across a
-  // src change. Replace it before the caller assigns the next track so the new
-  // Audio can establish one clean lifetime MediaElementSource binding.
-  if (sourceUsesCapture && previousSourceMedia === audio) {
-    replaceAudioElementForGraphRecovery(reason || 'capture-track-switch', { preservePlayback: false });
+  var canAdoptPrepared = !!(
+    preparedGraph
+    && preparedGraph.context
+    && preparedGraph.context.state !== 'closed'
+    && preparedGraph.source
+    && preparedGraph.analyser
+    && preparedGraph.beatAnalyser
+    && preparedGraph.gainNode
+  );
+  // Chromium can freeze the media clock when a lifetime-bound element (capture
+  // or MediaElementSource) gets a new src. Replace it before the next track is
+  // assigned, unless this is a prepared/gapless handoff that must keep the
+  // already-playing element.
+  if (!canAdoptPrepared && previousSourceMedia === audio && (sourceUsesCapture || audio.__mineradioMediaSourceBound)) {
+    replaceAudioElementForGraphRecovery(reason || (sourceUsesCapture ? 'capture-track-switch' : 'bound-track-switch'), { preservePlayback: false });
     return;
   }
   disconnectAudioGraphNodes(!sourceUsesCapture && !mediaElementChanged);

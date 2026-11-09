@@ -103,7 +103,9 @@ function playbackResumePausedLongEnough(song) {
 function trackSwitchStallRecoveryAllowed(song, opts) {
   opts = opts || {};
   if (!opts.trackSwitch || opts.resumeRecovery) return true;
-  return playbackResumeProvider(song) === 'qishui';
+  return typeof canRefreshCurrentPlaybackUrlForResume === 'function'
+    ? canRefreshCurrentPlaybackUrlForResume(song)
+    : playbackResumeProvider(song) === 'qishui';
 }
 
 function isQishuiTrackStartStalled(song, opts, media, startTime, current) {
@@ -368,6 +370,9 @@ async function completeAudioPlayStart(opts, reason, expectedMedia, expectedToken
   if (!playbackAttemptStillCurrent(expectedMedia, expectedToken)) return false;
   await ensurePlaybackAudioGraph(reason || 'playback-started');
   if (!playbackAttemptStillCurrent(expectedMedia, expectedToken)) return false;
+  if (expectedMedia.paused || expectedMedia.ended) {
+    return false;
+  }
   switchPlaybackVisualToEmily();
   playing = true; setPlayIcon(true);
   if (typeof markStageLyricsPlaybackResume === 'function') markStageLyricsPlaybackResume(reason || 'playback-started');
@@ -460,9 +465,13 @@ async function retryTrackSwitchAudioPlayOnce(opts, originalErr, expectedMedia, e
   await ensurePlaybackAudioGraph('track-switch-retry-before-play');
   if (!playbackAttemptStillCurrent(retryAudio, expectedToken)) return null;
   var retryPlay = retryAudio.play();
-  await ensurePlaybackAudioGraph('track-switch-retry-after-play-request');
   await awaitMediaPlayWithTimeout(retryAudio, retryPlay, expectedToken);
   if (!playbackAttemptStillCurrent(retryAudio, expectedToken)) return null;
+  if (retryAudio.paused && !retryAudio.ended) {
+    var retryPausedErr = new Error('AUDIO_PLAY_STILL_PAUSED: retry play() resolved while paused');
+    retryPausedErr.code = 'AUDIO_PLAY_STILL_PAUSED';
+    throw retryPausedErr;
+  }
   return await completeAudioPlayStart(opts, 'track-switch-retry-started', retryAudio, expectedToken);
 }
 
@@ -485,17 +494,27 @@ async function attemptAudioPlay(opts) {
     var fastResume = await resumePausedAudioFast(opts);
     if (fastResume === true) return true;
     if (!playbackAttemptStillCurrent(expectedMedia, expectedToken)) return false;
+    if (opts.trackSwitch && expectedMedia.readyState < 2) {
+      await waitForAudioReadyToPlay(expectedMedia, opts.manual ? 1200 : 1800);
+      if (!playbackAttemptStillCurrent(expectedMedia, expectedToken)) return false;
+    }
     if (!audioGraphHealthy()) initAudio();
     if (opts.fade !== false) preparePlaybackFadeIn();
     if (opts.manual || opts.trackSwitch) {
-      var directPlay = expectedMedia.play();
       await applyAudioOutputDevice(expectedMedia);
       if (!playbackAttemptStillCurrent(expectedMedia, expectedToken)) {
-        Promise.resolve(directPlay).catch(function () { });
         return false;
       }
-      await ensurePlaybackAudioGraph(opts.manual ? 'manual-after-play-request' : 'track-switch-after-play-request');
+      await ensurePlaybackAudioGraph(opts.manual ? 'manual-before-play' : 'track-switch-before-play');
+      if (!playbackAttemptStillCurrent(expectedMedia, expectedToken)) return false;
+      var directPlay = expectedMedia.play();
       await awaitMediaPlayWithTimeout(expectedMedia, directPlay, expectedToken);
+      if (!playbackAttemptStillCurrent(expectedMedia, expectedToken)) return false;
+      if (expectedMedia.paused && !expectedMedia.ended) {
+        var pausedErr = new Error('AUDIO_PLAY_STILL_PAUSED: media.play() resolved while paused');
+        pausedErr.code = 'AUDIO_PLAY_STILL_PAUSED';
+        throw pausedErr;
+      }
     } else {
       await applyAudioOutputDevice(expectedMedia);
       if (!playbackAttemptStillCurrent(expectedMedia, expectedToken)) return false;
