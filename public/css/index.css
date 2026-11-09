@@ -557,6 +557,10 @@ body.desktop-shell #desktop-titlebar::after {
   content: none
 }
 
+body.desktop-shell.desktop-platform-mac #desktop-titlebar {
+  padding-left: 84px
+}
+
 .desktop-drag-region {
   height: 100%;
   flex: 1;
@@ -571,6 +575,10 @@ body.desktop-shell #desktop-titlebar::after {
   text-transform: uppercase;
   -webkit-app-region: drag;
   pointer-events: auto
+}
+
+body.desktop-shell.desktop-platform-mac .desktop-drag-region {
+  min-width: 84px
 }
 
 .desktop-app-mark {
@@ -591,6 +599,10 @@ body.desktop-shell #desktop-titlebar::after {
   box-shadow: none;
   -webkit-app-region: no-drag;
   pointer-events: auto
+}
+
+body.desktop-shell.desktop-platform-mac .desktop-window-btn {
+  display: none !important
 }
 
 .desktop-window-btn {
@@ -782,14 +794,24 @@ body.visual-guide-active #fullscreen-diy-btn {
   transform: translateY(-18px) scale(.96) !important
 }
 
-body.desktop-shell.desktop-fullscreen #desktop-titlebar,
-html:fullscreen body.desktop-shell #desktop-titlebar {
+body.desktop-shell.desktop-platform-win.desktop-fullscreen #desktop-titlebar,
+html:fullscreen body.desktop-shell.desktop-platform-win #desktop-titlebar {
   display: none !important
 }
 
-body.desktop-shell.desktop-fullscreen #fullscreen-diy-zone,
-html:fullscreen body.desktop-shell #fullscreen-diy-zone {
+body.desktop-shell.desktop-platform-mac.desktop-fullscreen #desktop-titlebar,
+html:fullscreen body.desktop-shell.desktop-platform-mac #desktop-titlebar {
+  display: flex !important
+}
+
+body.desktop-shell.desktop-platform-win.desktop-fullscreen #fullscreen-diy-zone,
+html:fullscreen body.desktop-shell.desktop-platform-win #fullscreen-diy-zone {
   display: flex
+}
+
+body.desktop-shell.desktop-platform-mac.desktop-fullscreen #fullscreen-diy-zone,
+html:fullscreen body.desktop-shell.desktop-platform-mac #fullscreen-diy-zone {
+  display: none !important
 }
 
 body.fullscreen-diy-peek #fullscreen-diy-zone,
@@ -804,11 +826,13 @@ body.fullscreen-diy-peek #fullscreen-diy-btn,
   transform: translateY(0) scale(1)
 }
 
-body.desktop-shell.desktop-fullscreen #search-area.peek {
+body.desktop-shell.desktop-platform-win.desktop-fullscreen #search-area.peek,
+html:fullscreen body.desktop-shell.desktop-platform-win #search-area.peek {
   top: 24px
 }
 
-body.desktop-shell.desktop-fullscreen #top-right {
+body.desktop-shell.desktop-platform-win.desktop-fullscreen #top-right,
+html:fullscreen body.desktop-shell.desktop-platform-win #top-right {
   top: 24px
 }
 

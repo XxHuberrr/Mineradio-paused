@@ -174,7 +174,37 @@ function getRenderLoadTier() {
   if (cssPixels >= 3200000 || renderPixels >= 3600000) return 1;
   return 0;
 }
-var renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance' });
+function createMainRenderer() {
+  var attempts = [
+    { antialias: false, alpha: true, powerPreference: 'high-performance' },
+    { antialias: false, alpha: true, powerPreference: 'low-power' },
+  ];
+  var lastError = null;
+  for (var i = 0; i < attempts.length; i++) {
+    try {
+      if (i > 0) console.warn('Main renderer fallback attempt #' + (i + 1));
+      return new THREE.WebGLRenderer(attempts[i]);
+    } catch (err) {
+      lastError = err;
+      console.warn('Main renderer init failed:', err && err.message ? err.message : err);
+    }
+  }
+  var canvas = document.createElement('canvas');
+  var gl = null;
+  try {
+    gl = canvas.getContext('webgl', { alpha: true, antialias: false, powerPreference: 'default' })
+      || canvas.getContext('experimental-webgl', { alpha: true, antialias: false });
+    if (gl) {
+      console.warn('Main renderer fallback attempt #3');
+      return new THREE.WebGLRenderer({ canvas: canvas, context: gl, antialias: false, alpha: true });
+    }
+  } catch (err2) {
+    lastError = err2;
+    console.warn('Main renderer manual WebGL fallback failed:', err2 && err2.message ? err2.message : err2);
+  }
+  throw lastError || new Error('WEBGL_RENDERER_INIT_FAILED');
+}
+var renderer = createMainRenderer();
 renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(getRenderPixelRatio());
 renderer.setSize(innerWidth, innerHeight);

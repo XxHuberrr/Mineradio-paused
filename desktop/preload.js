@@ -1,7 +1,13 @@
 const { contextBridge, ipcRenderer, clipboard, webUtils } = require('electron');
+const PLATFORM_CLASS = process.platform === 'darwin'
+  ? 'desktop-platform-mac'
+  : (process.platform === 'win32' ? 'desktop-platform-win' : 'desktop-platform-other');
 
 contextBridge.exposeInMainWorld('desktopWindow', {
   isDesktop: true,
+  platform: process.platform,
+  isMac: process.platform === 'darwin',
+  isWindows: process.platform === 'win32',
   minimize: () => ipcRenderer.invoke('desktop-window-minimize'),
   restore: () => ipcRenderer.invoke('desktop-window-restore'),
   toggleMaximize: () => ipcRenderer.invoke('desktop-window-toggle-maximize'),
@@ -147,5 +153,7 @@ contextBridge.exposeInMainWorld('desktopWindow', {
 
 window.addEventListener('DOMContentLoaded', () => {
   document.documentElement.classList.add('desktop-shell-root');
+  document.documentElement.classList.add(PLATFORM_CLASS);
   document.body.classList.add('desktop-shell');
+  document.body.classList.add(PLATFORM_CLASS);
 });

@@ -135,6 +135,25 @@ const KUGOU_LOGIN_WARMUP_URL = 'https://www.kugou.com/newuc/user/uc/type=edit';
 const SPOTIFY_LOGIN_PARTITION = 'persist:mineradio-spotify-login';
 const SPOTIFY_OAUTH_TIMEOUT_MS = 3 * 60 * 1000;
 
+function isDevToolsShortcut(input) {
+  if (app.isPackaged) return false;
+  const key = String(input.key || '').toLowerCase();
+  const code = String(input.code || '').toLowerCase();
+  if (key === 'f12' || code === 'f12') return true;
+  if (key !== 'i' && code !== 'keyi') return false;
+  if (process.platform === 'darwin') return !!input.meta && !!input.alt;
+  return !!input.control && !!input.shift;
+}
+
+function toggleWindowDevTools(win) {
+  if (!win || win.isDestroyed()) return;
+  if (win.webContents.isDevToolsOpened()) {
+    win.webContents.closeDevTools();
+    return;
+  }
+  win.webContents.openDevTools({ mode: 'detach', activate: true });
+}
+
 // Keep app-owned settings and provider credentials independent from the
 // user-selectable Chromium cache. app.setName() must run before the first
 // derived path lookup or Electron can recompute userData below the cache root.
@@ -481,7 +500,6 @@ const CHROMIUM_SAFE_PERFORMANCE_SWITCHES = [
   ['enable-oop-rasterization'],
   ['enable-zero-copy'],
   ['enable-accelerated-2d-canvas'],
-  ['use-angle', 'd3d11'],
 ];
 const CHROMIUM_OPT_IN_PERFORMANCE_SWITCHES = [
   ['ignore-gpu-blocklist', null, 'MINERADIO_IGNORE_GPU_BLOCKLIST'],
@@ -495,6 +513,7 @@ function appendChromiumSwitch(name, value) {
   else app.commandLine.appendSwitch(name, value);
 }
 for (const [name, value] of CHROMIUM_SAFE_PERFORMANCE_SWITCHES) appendChromiumSwitch(name, value);
+if (process.platform === 'win32') appendChromiumSwitch('use-angle', 'd3d11');
 for (const [name, value, envName] of CHROMIUM_OPT_IN_PERFORMANCE_SWITCHES) {
   if (process.env[envName] === '1') appendChromiumSwitch(name, value);
 }
@@ -3498,6 +3517,32 @@ function exitFullscreenToWindow(win) {
   // trigger two native WE rebuilds for one user action.
 }
 
+function enterNativeFullscreen(win) {
+  if (!win || win.isDestroyed()) return;
+  windowFullscreenActive = true;
+
+  const applyFullscreen = () => {
+    if (!win || win.isDestroyed() || win.isFullScreen()) return;
+    win.setFullScreen(true);
+    sendWindowState(win);
+  };
+
+  if (process.platform === 'darwin' && win.isMaximized()) {
+    let applied = false;
+    const applyAfterUnmaximize = () => {
+      if (applied) return;
+      applied = true;
+      setTimeout(applyFullscreen, 30);
+    };
+    win.once('unmaximize', applyAfterUnmaximize);
+    win.unmaximize();
+    setTimeout(applyAfterUnmaximize, 240);
+    return;
+  }
+
+  applyFullscreen();
+}
+
 function toggleFullscreen(win) {
   if (!win || win.isDestroyed()) return;
   if (win.isFullScreen() || windowFullscreenActive) {
@@ -3520,8 +3565,12 @@ function toggleFullscreen(win) {
     ensureMainWindowInsideDisplay(win);
   }
   setMainWindowFullscreenResizeGuard(win, true);
-  win.setFullScreen(true);
-  sendWindowState(win);
+  if (process.platform === 'darwin' && win.isMaximized()) {
+    enterNativeFullscreen(win);
+  } else {
+    win.setFullScreen(true);
+    sendWindowState(win);
+  }
 }
 
 function overlayUrl(page) {
@@ -4720,7 +4769,8 @@ ipcMain.handle('mineradio-cache-write-lyric', async (_event, key, payload) => {
 ipcMain.handle('desktop-window-close', (event, behavior) => {
   const win = getSenderWindow(event);
   if (behavior) closeBehavior = normalizeCloseBehavior(behavior);
-  win?.close();
+  if (win && !win.isDestroyed()) win.close();
+  if (BrowserWindow.getAllWindows().length <= 1) app.quit();
 });
 
 ipcMain.handle('desktop-window-get-close-behavior', () => {
@@ -5585,6 +5635,7 @@ async function loadMainWindowWithRetry(win) {
 async function createWindowOnce() {
   htmlFullscreenActive = false;
   windowFullscreenActive = false;
+  const isMac = process.platform === 'darwin';
   startupCompleted = false;
   startupState = {
     pid: process.pid,
@@ -5601,16 +5652,22 @@ async function createWindowOnce() {
     minWidth: initialMinimum.width,
     minHeight: initialMinimum.height,
     show: false,
-    frame: false,
+    frame: !isMac,
     fullscreen: false,
     resizable: true,
     transparent: true,
     opacity: process.env.MINERADIO_STARTUP_QA_HIDDEN === '1' ? 0 : 1,
     backgroundColor: '#00000000',
     hasShadow: true,
-    autoHideMenuBar: true,
+    autoHideMenuBar: !isMac,
     title: APP_NAME,
     icon: APP_ICON_ICO,
+    ...(isMac ? {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 16, y: 14 },
+      fullscreenable: true,
+      simpleFullscreen: false,
+    } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -5679,6 +5736,11 @@ async function createWindowOnce() {
   });
 
   win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && isDevToolsShortcut(input)) {
+      event.preventDefault();
+      toggleWindowDevTools(win);
+      return;
+    }
     if (isZoomShortcutInput(input)) {
       event.preventDefault();
       resetMainWindowZoom(win);
@@ -5697,7 +5759,13 @@ async function createWindowOnce() {
   });
 
   win.once('ready-to-show', () => showMainWindowSafely(win, 'ready-to-show'));
-  win.on('maximize', () => sendWindowState(win));
+  win.on('maximize', () => {
+    if (isMac && !win.isDestroyed() && !win.isFullScreen()) {
+      enterNativeFullscreen(win);
+      return;
+    }
+    sendWindowState(win);
+  });
   win.on('unmaximize', () => sendWindowState(win));
   win.on('minimize', () => {
     const minimizeIntent = consumeMainWindowMinimizeIntent(win);
@@ -5969,7 +6037,7 @@ if (!gotSingleInstanceLock) {
   });
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
+    app.quit();
   });
 
   app.on('before-quit', (event) => {

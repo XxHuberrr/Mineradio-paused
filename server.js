@@ -57,6 +57,7 @@ const {
 const http = require('http');
 const https = require('https');
 const fs   = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const tls = require('tls');
@@ -137,7 +138,12 @@ const DEFAULT_COOKIE_FILE = path.join(__dirname, '.cookie');
 const DEFAULT_QQ_COOKIE_FILE = path.join(__dirname, '.qq-cookie');
 const DEFAULT_KUGOU_COOKIE_FILE = path.join(__dirname, '.kugou-cookie');
 const DEFAULT_QISHUI_COOKIE_FILE = path.join(__dirname, '.qishui-cookie');
-const BEATMAP_CACHE_DIR = process.env.MINERADIO_BEAT_CACHE_DIR || 'D:\\MineradioCache\\beatmaps';
+function defaultBeatmapCacheDir() {
+  if (process.platform === 'win32') return 'D:\\MineradioCache\\beatmaps';
+  if (process.platform === 'darwin') return path.join(os.homedir(), 'Library', 'Caches', 'Mineradio', 'beatmaps');
+  return path.join(os.homedir(), '.cache', 'Mineradio', 'beatmaps');
+}
+const BEATMAP_CACHE_DIR = process.env.MINERADIO_BEAT_CACHE_DIR || defaultBeatmapCacheDir();
 const CUEFIELD_FEEDBACK_FILE = process.env.CUEFIELD_FEEDBACK_FILE || path.join(__dirname, 'data', 'cuefield-feedback.jsonl');
 const LISTEN_SYNC_JOURNAL_FILE = process.env.MINERADIO_LISTEN_SYNC_FILE || path.join(__dirname, 'data', 'listen-sync-journal.json');
 const LISTEN_SYNC_JOURNAL_LIMIT = 600;
@@ -710,8 +716,9 @@ function beatCacheRootInfo() {
   const dir = path.resolve(BEATMAP_CACHE_DIR);
   const root = path.parse(dir).root;
   const drive = root ? root.replace(/[\\\/]+$/, '').toUpperCase() : '';
-  const allowed = !!root && !/^C:$/i.test(drive);
-  const available = allowed && fs.existsSync(root);
+  const isWindows = process.platform === 'win32';
+  const allowed = isWindows ? (!!root && !/^C:$/i.test(drive)) : !!root;
+  const available = !!root && fs.existsSync(root);
   return { dir, root, drive, allowed, available };
 }
 function ensureBeatMapCacheDir() {
