@@ -1,0 +1,93 @@
+name: Build Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish Windows release
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate tag version
+        shell: pwsh
+        run: |
+          $tagVersion = "${env:GITHUB_REF_NAME}".TrimStart('v')
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($tagVersion -ne $packageVersion) {
+            throw "Tag version $tagVersion does not match package.json version $packageVersion"
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run build:win -- --publish never
+
+      - name: Generate SHA-256 checksums
+        shell: pwsh
+        run: |
+          $version = "${env:GITHUB_REF_NAME}".TrimStart('v')
+          $installer = Get-ChildItem "dist/Mineradio-$version-Setup.exe"
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content "dist/Mineradio-$version-SHA256SUMS.txt"
+
+      - name: Prepare release notes
+        id: metadata
+        shell: pwsh
+        run: |
+          $version = "${env:GITHUB_REF_NAME}".TrimStart('v')
+          "version=$version" | Add-Content $env:GITHUB_OUTPUT
+          $lines = Get-Content CHANGELOG.md
+          $start = [Array]::IndexOf($lines, "## v$version")
+          if ($start -lt 0) {
+            throw "CHANGELOG.md has no section for v$version"
+          }
+          $end = $lines.Count
+          for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^## ') {
+              $end = $i
+              break
+            }
+          }
+          $changes = ($lines[($start + 1)..($end - 1)] -join "`n").Trim()
+          @"
+          # Mineradio $version
+
+          $changes
+
+          ## 下载
+
+          GitHub Release 附件包含完整 Windows 安装包、更新元数据和 SHA-256 校验文件。
+
+          完整安装包：`Mineradio-$version-Setup.exe`
+
+          请核对 `Mineradio-$version-SHA256SUMS.txt` 后再运行安装包。
+          "@ | Set-Content release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Mineradio ${{ steps.metadata.outputs.version }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: false
+          files: |
+            dist/Mineradio-*-Setup.exe
+            dist/latest.yml
+            dist/*.blockmap
+            dist/*SHA256SUMS.txt
