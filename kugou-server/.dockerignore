@@ -1,0 +1,13 @@
+/**
+!/module
+!/plugins
+!/public
+!/static
+!/util
+!/app.js
+!/server.js
+!/package.json
+!/package-lock.json
+!/pnpm-lock.yaml
+!/index.js
+!/main.js

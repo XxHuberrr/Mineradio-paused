@@ -6,7 +6,8 @@ const path = require('path');
 const { execFile } = require('child_process');
 
 const isWin = process.platform === 'win32';
-const SYSTEM_PURGE_AVAILABLE = isWin && process.env.MINERADIO_DISABLE_SYSTEM_MEMORY_PURGE !== '1';
+const isLinux = process.platform === 'linux';
+const SYSTEM_PURGE_AVAILABLE = (isWin || isLinux) && process.env.MINERADIO_DISABLE_SYSTEM_MEMORY_PURGE !== '1';
 const SYSTEM_PURGE_ENABLED = SYSTEM_PURGE_AVAILABLE && process.env.MINERADIO_DISABLE_AUTOMATIC_SYSTEM_MEMORY_PURGE !== '1';
 
 const MEMORY_MASK = {
@@ -28,6 +29,104 @@ const MEMORY_CMD = {
 const STATUS_SUCCESS = 0;
 const STATUS_ACCESS_DENIED = -1073741790;
 const STATUS_PRIVILEGE_NOT_HELD = -1073741718;
+
+// ── Linux memory purge implementation ──────────────────
+// 思路跟随 Windows 版：不同 mask 位对应不同级别的内存操作
+// workingSet(1)  → sync (写回脏页，不需要 root)
+// modifiedList(4)→ drop pagecache (需要 root)
+// standbyList(8) → drop dentries/inodes (需要 root)
+// standbyLow(16) → compact memory (需要 root)
+
+const LINUX_MEM_PURGE_SCRIPT = [
+  '#!/bin/bash',
+  'set -e',
+  'MASK=${1:-0}',
+  'BEFORE=$(awk \'/MemAvailable/{print $2}\' /proc/meminfo)',
+  'TOTAL=$(awk \'/MemTotal/{print $2}\' /proc/meminfo)',
+  'LOAD_BEFORE=$(( (TOTAL - BEFORE) * 100 / TOTAL ))',
+  'SYNCED=0; DROPPED_PAGE=0; DROPPED_DENTRY=0; COMPACTED=0; FAILED=0',
+  '',
+  '# workingSet (1): sync dirty pages to disk',
+  'if [ $(( MASK & 1 )) -eq 1 ]; then sync 2>/dev/null && SYNCED=1 || true; fi',
+  '',
+  '# modifiedList (4): drop pagecache (needs root)',
+  'if [ $(( MASK & 4 )) -eq 4 ]; then',
+  '  if echo 1 > /proc/sys/vm/drop_caches 2>/dev/null; then DROPPED_PAGE=1; else FAILED=$((FAILED+1)); fi',
+  'fi',
+  '',
+  '# standbyList (8): drop dentries and inodes (needs root)',
+  'if [ $(( MASK & 8 )) -eq 8 ]; then',
+  '  if echo 2 > /proc/sys/vm/drop_caches 2>/dev/null; then DROPPED_DENTRY=1; else FAILED=$((FAILED+1)); fi',
+  'fi',
+  '',
+  '# standbyLow (16): compact memory (needs root)',
+  'if [ $(( MASK & 16 )) -eq 16 ]; then',
+  '  if echo 1 > /proc/sys/vm/compact_memory 2>/dev/null; then COMPACTED=1; else FAILED=$((FAILED+1)); fi',
+  'fi',
+  '',
+  'AFTER=$(awk \'/MemAvailable/{print $2}\' /proc/meminfo)',
+  'LOAD_AFTER=$(( (TOTAL - AFTER) * 100 / TOTAL ))',
+  'FREED=$(( AFTER - BEFORE ))',
+  '',
+  'echo "{\\"ok\\":true,\\"beforeKB\\":$BEFORE,\\"afterKB\\":$AFTER,\\"freedKB\\":$FREED,\\"loadBefore\\":$LOAD_BEFORE,\\"loadAfter\\":$LOAD_AFTER,\\"synced\\":$SYNCED,\\"droppedPage\\":$DROPPED_PAGE,\\"droppedDentry\\":$DROPPED_DENTRY,\\"compacted\\":$COMPACTED,\\"denied\\":$FAILED}"'
+].join('\n');
+
+function runBashPurge(mask, timeoutMs) {
+  const scriptPath = makeTempPath('mem-purge', 'sh');
+  fs.writeFileSync(scriptPath, LINUX_MEM_PURGE_SCRIPT + '\n', { mode: 0o700 });
+  return new Promise((resolve, reject) => {
+    execFile('bash', [scriptPath, String(mask)], {
+      timeout: timeoutMs || 30000,
+      maxBuffer: 64 * 1024,
+    }, (error, stdout, stderr) => {
+      safeUnlink(scriptPath);
+      if (error && !stdout) {
+        reject(new Error(stderr || error.message || 'LINUX_MEMORY_PURGE_FAILED'));
+        return;
+      }
+      try {
+        const text = String(stdout || '').trim();
+        if (text) resolve(JSON.parse(text));
+        else reject(new Error('empty output from purge script'));
+      } catch (parseError) {
+        reject(new Error('invalid purge output: ' + (stdout || '').slice(0, 200)));
+      }
+    });
+  });
+}
+
+function buildLinuxPurgeResult(data) {
+  data = data || {};
+  const freedKB = Number(data.freedKB || 0);
+  const denied = data.denied > 0;
+  const didSomething = data.synced || data.droppedPage || data.droppedDentry || data.compacted;
+  const steps = [];
+  if (data.synced !== undefined) steps.push({ id: 'workingSet', status: data.synced ? 0 : -1 });
+  if (data.droppedPage !== undefined) steps.push({ id: 'modifiedList', status: data.droppedPage ? 0 : -1 });
+  if (data.droppedDentry !== undefined) steps.push({ id: 'standbyList', status: data.droppedDentry ? 0 : -1 });
+  if (data.compacted !== undefined) steps.push({ id: 'standbyLow', status: data.compacted ? 0 : -1 });
+
+  if (denied && !didSomething) {
+    return { ok: false, needAdmin: true, message: 'Need root permission for system memory purge.', steps };
+  }
+  if (freedKB > 0 || didSomething) {
+    return {
+      ok: true,
+      beforeMB: Math.round(Number(data.beforeKB || 0) / 1024),
+      afterMB: Math.round(Number(data.afterKB || 0) / 1024),
+      freedMB: Math.max(0, Math.round(freedKB / 1024)),
+      loadBefore: Number(data.loadBefore || 0),
+      loadAfter: Number(data.loadAfter || 0),
+      steps,
+      partial: denied && didSomething,
+      needAdmin: denied && !didSomething,
+      message: denied && didSomething ? 'Partial purge completed; full result requires root permission.' : '',
+    };
+  }
+  return { ok: false, needAdmin: maskNeedsAdmin(MEMORY_MASK_DEFAULT), message: 'System memory API returned no result.', steps };
+}
+
+// ── End Linux implementation ───────────────────────────
 
 const NATIVE_TYPE_BLOCK = [
   'Add-Type @\'',
@@ -313,6 +412,7 @@ function readJsonFile(filePath) {
 }
 
 function probeProcessElevation() {
+  if (isLinux) return Promise.resolve(process.getuid ? process.getuid() === 0 : false);
   if (!isWin) return Promise.resolve(false);
   const scriptPath = writeTempScript('elev-check', [
     NATIVE_TYPE_BLOCK,
@@ -344,9 +444,10 @@ function purgeSystemMemory(mask, options) {
       message: 'Automatic system memory purge is disabled by default to avoid foreground CPU spikes.',
     });
   }
-  if (!isWin) {
-    return Promise.resolve({ ok: false, unsupported: true, message: 'System memory purge is Windows-only.' });
+  if (!isWin && !isLinux) {
+    return Promise.resolve({ ok: false, unsupported: true, message: 'System memory purge is Windows/Linux-only.' });
   }
+  if (isLinux) return runBashPurge(mask).then(buildLinuxPurgeResult).catch((error) => ({ ok: false, message: String(error && error.message || error || 'LINUX_MEMORY_PURGE_FAILED') }));
   const scriptPath = writeTempScript('mem-purge', buildPurgeScript(mask, ''));
   return runPowerShellFile(scriptPath, 90000)
     .then(parsePurgeResult)
@@ -361,17 +462,59 @@ function purgeSystemMemoryElevated(mask, options) {
       ok: false,
       disabled: true,
       needAdmin: false,
-      message: 'Elevated memory purge is disabled by default; Mineradio will not open administrator PowerShell windows.',
+      message: 'Elevated memory purge is disabled by default; Mineradio will not open administrator windows.',
     });
   }
-  if (!isWin) {
-    return Promise.resolve({ ok: false, unsupported: true, message: 'System memory purge is Windows-only.' });
+  if (!isWin && !isLinux) {
+    return Promise.resolve({ ok: false, unsupported: true, message: 'System memory purge is Windows/Linux-only.' });
+  }
+  // Linux: use pkexec for elevation (KDE/GNOME polkit agent)
+  if (isLinux) {
+    const scriptPath = makeTempPath('mem-purge-elevated', 'sh');
+    fs.writeFileSync(scriptPath, LINUX_MEM_PURGE_SCRIPT + '\n', { mode: 0o700 });
+    const resultPath = makeTempPath('mem-result', 'json');
+    const launcherPath = makeTempPath('mem-launcher', 'sh');
+    const launcherScript = [
+      '#!/bin/bash',
+      'bash "' + scriptPath + '" "' + mask + '" > "' + resultPath + '" 2>/dev/null',
+      'if [ -f "' + resultPath + '" ]; then cat "' + resultPath + '"; else echo \'{"ok":false,"needAdmin":true,"message":"Permission denied or cancelled"}\'; fi',
+    ].join('\n');
+    fs.writeFileSync(launcherPath, launcherScript, { mode: 0o700 });
+    return new Promise((resolve) => {
+      execFile('pkexec', ['bash', launcherPath], {
+        timeout: 120000,
+        maxBuffer: 64 * 1024,
+      }, (error, stdout, stderr) => {
+        const data = readJsonFile(resultPath);
+        safeUnlink(scriptPath);
+        safeUnlink(launcherPath);
+        safeUnlink(resultPath);
+        if (data) {
+          resolve(buildLinuxPurgeResult(data));
+          return;
+        }
+        if (error) {
+          resolve({ ok: false, needAdmin: true, message: 'User cancelled or denied root permission.' });
+          return;
+        }
+        try {
+          const text = String(stdout || '').trim();
+          if (text) {
+            resolve(buildLinuxPurgeResult(JSON.parse(text)));
+          } else {
+            resolve({ ok: false, needAdmin: true, message: 'No result from elevated purge.' });
+          }
+        } catch (e) {
+          resolve({ ok: false, needAdmin: true, message: 'User cancelled or denied root permission.' });
+        }
+      });
+    });
   }
   const resultPath = makeTempPath('mem-result', 'json');
   const scriptPath = writeTempScript('mem-purge-elevated', [
     '#requires -RunAsAdministrator',
     buildPurgeScript(mask, resultPath),
-  ].join('\r\n'));
+  ]);
   const launcherPath = writeTempScript('mem-launcher', [
     '$ErrorActionPreference = "Stop"',
     "$scriptPath = '" + escapePowerShellLiteral(scriptPath) + "'",
@@ -404,6 +547,28 @@ async function purgeSystemMemorySmart(mask, options) {
 }
 
 function queryExtendedMemoryStats() {
+  if (!isWin && !isLinux) return Promise.resolve(null);
+  if (isLinux) {
+    const now = Date.now();
+    if (extendedCache.data && now - extendedCache.at < 8000) return Promise.resolve(extendedCache.data);
+    try {
+      const meminfo = fs.readFileSync('/proc/meminfo', 'utf8');
+      const total = parseInt((meminfo.match(/MemTotal:\s+(\d+)/) || [0,0])[1], 10);
+      const avail = parseInt((meminfo.match(/MemAvailable:\s+(\d+)/) || [0,0])[1], 10);
+      const used = total - avail;
+      const snap = {
+        totalMB: Math.round(total / 1024),
+        freeMB: Math.round(avail / 1024),
+        usedMB: Math.round(used / 1024),
+        usedPercent: total > 0 ? Math.round(used * 100 / total) : 0,
+        source: '/proc/meminfo',
+      };
+      extendedCache = { at: now, data: snap };
+      return Promise.resolve(snap);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+  }
   if (!isWin) return Promise.resolve(null);
   const now = Date.now();
   if (extendedCache.data && now - extendedCache.at < 8000) return Promise.resolve(extendedCache.data);
@@ -434,7 +599,7 @@ function queryExtendedMemoryStats() {
 
 async function getMemorySnapshotExtended() {
   const base = getMemorySnapshot();
-  if (!isWin || !SYSTEM_PURGE_AVAILABLE) return base;
+  if ((!isWin && !isLinux) || !SYSTEM_PURGE_AVAILABLE) return base;
   const ext = await queryExtendedMemoryStats();
   if (!ext || !ext.totalMB) return base;
   return Object.assign({}, base, ext, {
@@ -445,6 +610,25 @@ async function getMemorySnapshotExtended() {
 }
 
 function trimAppWorkingSets(pids) {
+  // Linux: clear page referenced bits via /proc/self/clear_refs (best-effort)
+  if (isLinux) {
+    const list = Array.isArray(pids)
+      ? pids.filter((pid) => Number.isFinite(Number(pid)) && Number(pid) > 0).map((pid) => Math.round(Number(pid)))
+      : [];
+    const targetPids = list.length ? Array.from(new Set(list)) : [process.pid];
+    let trimmed = 0;
+    for (const pid of targetPids) {
+      try {
+        if (pid === process.pid) {
+          fs.writeFileSync('/proc/self/clear_refs', '1\n');
+          trimmed++;
+        }
+      } catch (e) {
+        // Other processes need ptrace permission, skip silently
+      }
+    }
+    return Promise.resolve({ ok: true, trimmed, scope: 'app' });
+  }
   if (!isWin) return Promise.resolve({ ok: true, trimmed: 0, unsupported: true, scope: 'app' });
   const list = Array.isArray(pids)
     ? pids.filter((pid) => Number.isFinite(Number(pid)) && Number(pid) > 0).map((pid) => Math.round(Number(pid)))

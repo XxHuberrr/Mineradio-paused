@@ -89,6 +89,7 @@ const {
   extractKugouAuth,
   kugouAudioReferer,
 } = require('./kugou-api');
+const kugouLite = require('./kugou-lite');
 const {
   getQishuiStatus,
   handleQishuiStatus,
@@ -371,6 +372,284 @@ function refreshConfiguredCookieStores(force) {
 function refreshQQConfiguredCookieStore(force) {
   qqCookie = refreshConfiguredCookieStore(configuredCookieStores.qq, force);
   return qqCookie;
+}
+
+// ── 酷狗概念版每日 VIP 奖励（每日领取一天 VIP，按自然日去重并落盘）──────────
+function localDayKey(ts) {
+  const d = ts ? new Date(ts) : new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+function getKugouRewardStateFile() {
+  if (process.env.KUGOU_REWARD_STATE_FILE) return process.env.KUGOU_REWARD_STATE_FILE;
+  try { return path.join(path.dirname(getKugouCookieFile()), 'kugou-reward-state.json'); } catch (_) { return ''; }
+}
+function readKugouRewardState() {
+  try {
+    const file = getKugouRewardStateFile();
+    if (file && fs.existsSync(file)) {
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (raw && typeof raw === 'object') return raw;
+    }
+  } catch (e) { console.warn('[KugouReward] state read failed:', e && e.message); }
+  return {};
+}
+function writeKugouRewardState(state) {
+  try {
+    const file = getKugouRewardStateFile();
+    if (!file) return;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(state, null, 2), 'utf8');
+  } catch (e) { console.warn('[KugouReward] state write failed:', e && e.message); }
+}
+function kugouRewardLoggedIn() {
+  const auth = extractKugouAuth(kugouCookie);
+  return !!(auth && auth.loggedIn && auth.userid && String(auth.userid) !== '0' && auth.token);
+}
+let dailyVipClaimPromise = null;
+// 领取一天概念版 VIP。默认当天已成功/已领取就跳过；force=true 强制再请求一次（手动按钮用）
+async function claimKugouDailyVip(options) {
+  const opts = options || {};
+  const reason = opts.reason || 'manual';
+  if (!kugouRewardLoggedIn()) return { ok: false, skipped: 'NOT_LOGGED_IN', message: '未登录酷狗概念版' };
+  const today = localDayKey();
+  const state = readKugouRewardState();
+  const cached = state.dailyVip;
+  const uid = String(extractKugouAuth(kugouCookie).userid || '');
+  const sameDaySameUser = !!(cached && cached.day === today && String(cached.userid || '') === uid);
+  if (!opts.force && sameDaySameUser && (cached.ok || cached.already)) {
+    return { ok: true, already: !!cached.already, cached: true, day: today, message: cached.message || '' };
+  }
+  // 自动触发时的节流：同一天最多 4 次、两次之间至少隔 10 分钟（避免每次切歌都打接口）
+  const attempts = (!opts.force && sameDaySameUser) ? Number(cached.attempts || 0) : 0;
+  if (!opts.force && attempts >= 4) return { ok: false, skipped: 'DAILY_LIMIT', attempts, day: today };
+  if (!opts.force && sameDaySameUser && cached.at && (Date.now() - Number(cached.at) < 10 * 60 * 1000)) {
+    return { ok: false, skipped: 'THROTTLED', day: today };
+  }
+  if (dailyVipClaimPromise) return dailyVipClaimPromise;
+  dailyVipClaimPromise = (async () => {
+    try {
+      const outcome = await kugouLite.liteDailyVipClaim(kugouCookie, today);
+      let monthRecord = null;
+      try {
+        const record = await kugouLite.liteMonthVipRecord(kugouCookie);
+        monthRecord = record && (record.data || null);
+      } catch (recordErr) {
+        console.warn('[KugouDailyVip] month record failed:', recordErr && recordErr.message);
+      }
+      const entry = {
+        day: today,
+        userid: uid,
+        ok: !!outcome.ok,
+        already: !!outcome.already,
+        code: outcome.code || 0,
+        message: outcome.message || (outcome.already ? '今日已领取' : ''),
+        sourceId: outcome.sourceId || 0,
+        attempts: attempts + 1,
+        at: Date.now(),
+      };
+      writeKugouRewardState(Object.assign({}, readKugouRewardState(), { dailyVip: entry }));
+      console.log('[KugouDailyVip]', reason, JSON.stringify({ day: today, ok: entry.ok, already: entry.already, code: entry.code, message: entry.message, monthRecord }));
+      if (entry.ok || entry.already) clearKugouSessionCaches(); // 让 VIP 状态立即可见
+      return Object.assign({ day: today, cached: false, monthRecord }, outcome, { message: entry.message });
+    } catch (e) {
+      console.warn('[KugouDailyVip] failed:', (e && (e.body ? JSON.stringify(e.body) : e.message)) || e);
+      return { ok: false, day: today, error: (e && e.message) || 'DAILY_VIP_FAILED', raw: e && e.body ? e.body : null };
+    } finally {
+      dailyVipClaimPromise = null;
+    }
+  })();
+  return dailyVipClaimPromise;
+}
+
+// 听歌奖励：上报一首自然播放完成的歌曲（按自然日去重，单日最多 8 次）
+let listenRewardPromise = null;
+async function reportKugouListenReward(mixsongid, options) {
+  const opts = options || {};
+  if (!kugouRewardLoggedIn()) return { ok: false, skipped: 'NOT_LOGGED_IN', message: '未登录酷狗概念版' };
+  const id = Number(mixsongid);
+  if (!id || !Number.isFinite(id)) return { ok: false, skipped: 'MIXSONGID_REQUIRED', message: '缺少 mixSongId' };
+  const today = localDayKey();
+  const uid = String(extractKugouAuth(kugouCookie).userid || '');
+  const cached = readKugouRewardState().listenReport;
+  const sameDaySameUser = !!(cached && cached.day === today && String(cached.userid || '') === uid);
+  if (!opts.force && sameDaySameUser && (cached.ok || cached.already)) {
+    return { ok: true, already: !!cached.already, cached: true, day: today };
+  }
+  const attempts = (!opts.force && sameDaySameUser) ? Number(cached.attempts || 0) : 0;
+  if (!opts.force && attempts >= 8) return { ok: false, skipped: 'DAILY_LIMIT', attempts, day: today };
+  if (listenRewardPromise) return listenRewardPromise;
+  listenRewardPromise = (async () => {
+    try {
+      const outcome = await kugouLite.liteListenSongReport(id, kugouCookie);
+      const entry = {
+        day: today,
+        userid: uid,
+        ok: !!outcome.ok,
+        already: !!outcome.already,
+        code: outcome.code || 0,
+        message: outcome.message || '',
+        mixsongid: id,
+        attempts: attempts + 1,
+        at: Date.now(),
+      };
+      writeKugouRewardState(Object.assign({}, readKugouRewardState(), { listenReport: entry }));
+      console.log('[KugouListenReward]', JSON.stringify({ mixsongid: id, ok: entry.ok, already: entry.already, code: entry.code, attempts: entry.attempts, message: entry.message }));
+      if (entry.ok || entry.already) clearKugouSessionCaches();
+      return Object.assign({ day: today, cached: false, attempts: entry.attempts }, outcome);
+    } catch (e) {
+      console.warn('[KugouListenReward] failed:', e && e.message);
+      return { ok: false, error: (e && e.message) || 'LISTEN_REWARD_FAILED' };
+    } finally {
+      listenRewardPromise = null;
+    }
+  })();
+  return listenRewardPromise;
+}
+
+// 广告奖励：上报一条激励广告播放，领取概念版 VIP 时长
+// 服务端每天上限 8 次、每次约 +3 小时（响应 data.{total,done,remain,remain_vip_hour}）
+// 行为对齐 echomusic-kugou-reward 插件：自动补领当天剩余次数，两次之间至少隔 30 秒
+const KUGOU_AD_REWARD_INTERVAL_MS = 30 * 1000;
+let adRewardPromise = null;
+let adRewardPumping = false;
+function kugouAdRewardEnabled() {
+  return String(process.env.KUGOU_AD_REWARD || '1') !== '0';
+}
+async function claimKugouAdReward(options) {
+  const opts = options || {};
+  if (!kugouAdRewardEnabled()) return { ok: false, skipped: 'DISABLED' };
+  if (!kugouRewardLoggedIn()) return { ok: false, skipped: 'NOT_LOGGED_IN', message: '未登录酷狗概念版' };
+  const today = localDayKey();
+  const uid = String(extractKugouAuth(kugouCookie).userid || '');
+  const cached = readKugouRewardState().adReward;
+  const sameDaySameUser = !!(cached && cached.day === today && String(cached.userid || '') === uid);
+  const done = sameDaySameUser ? Number(cached.done || 0) : 0;
+  const total = sameDaySameUser ? Number(cached.total || 8) : 8;
+  if (!opts.force && sameDaySameUser && (done >= total || cached.exhausted)) {
+    return { ok: true, already: true, cached: true, done, total, remain: 0, day: today };
+  }
+  if (!opts.force && sameDaySameUser && cached.at && (Date.now() - Number(cached.at) < KUGOU_AD_REWARD_INTERVAL_MS)) {
+    return { ok: false, skipped: 'THROTTLED', done, total, remain: Math.max(0, total - done), day: today };
+  }
+  if (adRewardPromise) return adRewardPromise;
+  adRewardPromise = (async () => {
+    try {
+      const outcome = await kugouLite.liteAdPlayReport(kugouCookie);
+      const entry = {
+        day: today,
+        userid: uid,
+        ok: !!outcome.ok,
+        already: !!outcome.already,
+        code: outcome.code || 0,
+        message: outcome.message || '',
+        done: Number(outcome.done) || done + (outcome.ok && !outcome.already ? 1 : 0),
+        total: Number(outcome.total) || total,
+        remain: Number(outcome.remain) || 0,
+        remainVipHour: Number(outcome.remainVipHour) || 0,
+        awardVipHour: Number(outcome.awardVipHour) || 0,
+        exhausted: !!outcome.exhausted,
+        at: Date.now(),
+      };
+      writeKugouRewardState(Object.assign({}, readKugouRewardState(), { adReward: entry }));
+      console.log('[KugouAdReward]', opts.reason || 'auto', JSON.stringify(entry));
+      if (entry.ok || entry.already) clearKugouSessionCaches();
+      return Object.assign({ day: today, cached: false }, outcome, entry);
+    } catch (e) {
+      console.warn('[KugouAdReward] failed:', (e && e.body ? JSON.stringify(e.body) : e.message) || e);
+      return { ok: false, day: today, error: (e && e.message) || 'AD_REWARD_FAILED', raw: (e && e.body) || null, done, total, remain: Math.max(0, total - done) };
+    } finally {
+      adRewardPromise = null;
+    }
+  })();
+  return adRewardPromise;
+}
+// 自动补领：一直领到当天次数用尽（每次间隔 30 秒），后台跑、不阻塞调用方
+async function pumpKugouAdReward(reason) {
+  if (!kugouAdRewardEnabled()) return { ok: false, skipped: 'DISABLED' };
+  if (!kugouRewardLoggedIn()) return { ok: false, skipped: 'NOT_LOGGED_IN' };
+  if (adRewardPumping) return { ok: false, skipped: 'RUNNING' };
+  adRewardPumping = true;
+  let last = null;
+  try {
+    for (let i = 0; i < 8; i += 1) {
+      last = await claimKugouAdReward({ reason: reason || 'auto' });
+      if (!last || last.skipped === 'DISABLED' || last.skipped === 'NOT_LOGGED_IN') break;
+      const remain = Number(last.remain);
+      const done = Number(last.done) || 0;
+      const total = Number(last.total) || 8;
+      const more = (Number.isFinite(remain) && remain > 0) || last.skipped === 'THROTTLED' || (done > 0 && done < total);
+      if (!more) break;
+      await new Promise((resolve) => setTimeout(resolve, KUGOU_AD_REWARD_INTERVAL_MS));
+    }
+  } catch (e) {
+    console.warn('[KugouAdReward] pump failed:', e && e.message);
+  } finally {
+    adRewardPumping = false;
+  }
+  return last || { ok: false };
+}
+
+// 已购专辑 id 集合（10 分钟内缓存，用于区分「需购买」与「已购但接口没给地址」）
+let kugouPurchasedAlbumCache = { at: 0, userid: '', ids: null };
+async function getKugouPurchasedAlbumIds(force) {
+  if (!kugouRewardLoggedIn()) return null;
+  const uid = String(extractKugouAuth(kugouCookie).userid || '');
+  const cache = kugouPurchasedAlbumCache;
+  if (!force && cache.ids && cache.userid === uid && (Date.now() - Number(cache.at || 0) < 10 * 60 * 1000)) return cache.ids;
+  try {
+    const result = await kugouLite.litePurchased('albums', kugouCookie, 1, 200);
+    if (!result || !result.ok) return cache.ids;
+    const ids = new Set();
+    (result.goods || []).forEach((item) => {
+      ['album_id', 'albumid', 'albumId', 'AlbumID', 'id'].forEach((key) => {
+        const value = item && item[key];
+        if (value !== undefined && value !== null && String(value) !== '') ids.add(String(value));
+      });
+    });
+    kugouPurchasedAlbumCache = { at: Date.now(), userid: uid, ids };
+    return ids;
+  } catch (e) {
+    console.warn('[KugouPurchased] albums failed:', e && e.message);
+    return cache.ids;
+  }
+}
+
+// 组装酷狗登录态（含概念版 user/detail + vip/detail 增强），status / refresh 共用
+async function buildKugouLoginStatus() {
+  const auth = extractKugouAuth(kugouCookie);
+  let info = await getKugouLoginInfo(kugouCookie);
+  if (auth && auth.userid && auth.userid !== '0' && auth.token) {
+    try {
+      const [profile, vip] = await Promise.all([
+        kugouLite.liteUserDetail(kugouCookie),
+        kugouLite.liteVipDetail(kugouCookie),
+      ]);
+      if (profile && profile.ok) {
+        info = Object.assign({}, info, {
+          nickname: profile.nickname || info.nickname,
+          avatar: profile.avatar || info.avatar,
+          userId: profile.userid || info.userId,
+        });
+      }
+      if (vip && vip.ok) {
+        info = Object.assign({}, info, {
+          vipType: vip.isSvip ? 2 : (vip.isVip ? 1 : 0),
+          svipType: vip.isSvip ? 1 : 0,
+          vipLevel: vip.vipLevel,
+          isVip: vip.isVip,
+          isSvip: vip.isSvip,
+          vipExpireAt: vip.expireAt || info.vipExpireAt || '',
+          vipLabel: vip.vipLevel === 'svip' ? 'SVIP' : (vip.vipLevel === 'vip' ? 'VIP' : '无VIP'),
+          membershipVerified: true,
+          membershipSource: 'kugou-lite',
+        });
+      }
+    } catch (liteErr) {
+      console.warn('[KugouLoginStatus] lite enhance failed:', liteErr.message);
+    }
+  }
+  return info;
 }
 refreshConfiguredCookieStores(true);
 
@@ -4953,7 +5232,15 @@ const server = http.createServer(async (req, res) => {
       const kw = url.searchParams.get('keywords') || '';
       const limit = Math.max(4, Math.min(20, parseInt(url.searchParams.get('limit') || '12', 10) || 12));
       const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0);
-      const songs = await handleKugouSearch(kw, limit, kugouCookie, offset);
+      let songs = [];
+      try {
+        // 概念版优先（酷狗 2026-04 起搜索强制 cookie 认证，概念版签名可过）
+        songs = await kugouLite.liteSearch(kw, limit, kugouCookie, offset);
+        if (!songs.length) songs = await handleKugouSearch(kw, limit, kugouCookie, offset);
+      } catch (liteErr) {
+        console.warn('[KugouSearch] lite failed, fallback standard:', liteErr.message);
+        songs = await handleKugouSearch(kw, limit, kugouCookie, offset);
+      }
       sendJSON(res, { provider: 'kugou', songs, offset, limit, nextOffset: offset + songs.length, hasMore: songs.length >= limit });
     } catch (err) {
       console.error('[KugouSearch]', err);
@@ -5560,7 +5847,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pn === '/api/kugou/song/url') {
     try {
-      const info = await handleKugouSongUrl({
+      const songUrlParams = {
         hash: url.searchParams.get('hash') || url.searchParams.get('id') || '',
         albumId: url.searchParams.get('albumId') || url.searchParams.get('album_id') || '',
         albumAudioId: url.searchParams.get('albumAudioId') || url.searchParams.get('album_audio_id') || url.searchParams.get('mixSongId') || '',
@@ -5574,7 +5861,38 @@ const server = http.createServer(async (req, res) => {
         onlyVipPlayable: url.searchParams.get('onlyVipPlayable') || url.searchParams.get('only_vip_playable') || '',
         privilege: url.searchParams.get('privilege') || url.searchParams.get('mediaPrivilege') || url.searchParams.get('media_privilege') || '',
         fee: url.searchParams.get('fee') || '',
-      }, kugouCookie);
+      };
+      let info = null;
+      try {
+        // 概念版签名音源优先（登录态下才能拿到 url）
+        const liteUrl = await kugouLite.liteSongUrl(songUrlParams, kugouCookie);
+        if (liteUrl && liteUrl.url && liteUrl.playable) {
+          info = liteUrl;
+        } else if (liteUrl && liteUrl.reason === 'vip_required') {
+          // 概念版明确返回会员受限：直接返回，不回退标准版（标准版同样拿不到）
+          info = liteUrl;
+        }
+      } catch (liteErr) {
+        console.warn('[KugouSongUrl] lite failed, fallback standard:', liteErr.message);
+      }
+      if (!info) {
+        info = await handleKugouSongUrl(songUrlParams, kugouCookie);
+      }
+      // 概念版「需购买」判定：只有确实匹配到已购专辑时才补 purchasedAlbum=true（避免误报）
+      if (info && info.reason === 'vip_required' && songUrlParams.albumId) {
+        try {
+          const purchased = await getKugouPurchasedAlbumIds();
+          if (purchased && purchased.has(String(songUrlParams.albumId))) {
+            info = Object.assign({}, info, { purchasedAlbum: true, message: '已购专辑：概念版接口本次未返回地址，可稍后重试或换音质' });
+          }
+        } catch (_) { /* 判定失败不影响错误返回 */ }
+      }
+      // 听歌即自动补领当天奖励：一日 VIP（每天一次）+ 广告奖励时长（每 30 秒一次，领到当天用尽）
+      // 全部落盘去重、失败不影响播放
+      if (kugouRewardLoggedIn()) {
+        claimKugouDailyVip({ reason: 'play' }).catch((e) => console.warn('[KugouDailyVip] play trigger failed:', e && e.message));
+        pumpKugouAdReward('play').catch((e) => console.warn('[KugouAdReward] play trigger failed:', e && e.message));
+      }
       sendJSON(res, info);
     } catch (err) {
       console.error('[KugouSongUrl]', err);
@@ -5589,7 +5907,15 @@ const server = http.createServer(async (req, res) => {
       const albumAudioId = url.searchParams.get('albumAudioId') || url.searchParams.get('album_audio_id') || '';
       const duration = url.searchParams.get('duration') || '';
       if (!hash) { sendJSON(res, { provider: 'kugou', error: 'Missing Kugou hash', lyric: '' }, 400); return; }
-      const data = await handleKugouLyric(hash, albumAudioId, duration);
+      let data = null;
+      try {
+        // 概念版歌词优先
+        data = await kugouLite.liteLyric(hash, albumAudioId, duration, kugouCookie);
+        if (!data || !data.lyric) data = await handleKugouLyric(hash, albumAudioId, duration);
+      } catch (liteErr) {
+        console.warn('[KugouLyric] lite failed, fallback standard:', liteErr.message);
+        data = await handleKugouLyric(hash, albumAudioId, duration);
+      }
       sendJSON(res, data);
     } catch (err) {
       console.error('[KugouLyric]', err);
@@ -5600,10 +5926,205 @@ const server = http.createServer(async (req, res) => {
 
   if (pn === '/api/kugou/login/status') {
     try {
-      sendJSON(res, await getKugouLoginInfo(kugouCookie));
+      sendJSON(res, await buildKugouLoginStatus());
     } catch (err) {
       console.error('[KugouLoginStatus]', err);
       sendJSON(res, { provider: 'kugou', loggedIn: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  // 手动刷新登录状态：清缓存 + 重新读盘 cookie + 重新拉取资料/VIP（手机上领了 VIP / 改了状态后用）
+  if (pn === '/api/kugou/login/refresh') {
+    try {
+      refreshConfiguredCookieStores(true);
+      clearKugouSessionCaches();
+      const info = await buildKugouLoginStatus();
+      let unionVip = null;
+      if (kugouRewardLoggedIn()) {
+        try {
+          const union = await kugouLite.liteUnionVip(kugouCookie);
+          unionVip = (union && (union.data || union.raw)) || null;
+        } catch (unionErr) {
+          console.warn('[KugouLoginRefresh] union vip failed:', unionErr.message);
+        }
+      }
+      sendJSON(res, Object.assign({}, info, {
+        refreshed: true,
+        refreshedAt: Date.now(),
+        unionVip,
+      }));
+    } catch (err) {
+      console.error('[KugouLoginRefresh]', err);
+      sendJSON(res, { provider: 'kugou', loggedIn: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  // 每日奖励：领取一天酷狗概念版 VIP（听歌时自动补领，这里是手动触发）
+  if (pn === '/api/kugou/vip/daily-claim') {
+    try {
+      const force = ['1', 'true', 'yes'].indexOf(String(url.searchParams.get('force') || '').toLowerCase()) >= 0;
+      const result = await claimKugouDailyVip({ reason: force ? 'manual-force' : 'manual', force });
+      sendJSON(res, Object.assign({ provider: 'kugou' }, result));
+    } catch (err) {
+      console.error('[KugouDailyVip]', err);
+      sendJSON(res, { provider: 'kugou', ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  // 听歌奖励：上报一首自然播放完成的歌曲（需要真实 mixsongid）
+  if (pn === '/api/kugou/vip/listen-report') {
+    try {
+      const body = await readRequestBody(req);
+      const mixsongid = body.mixsongid || body.mixSongId || body.albumAudioId || url.searchParams.get('mixsongid') || '';
+      const force = ['1', 'true', 'yes'].indexOf(String(body.force || url.searchParams.get('force') || '').toLowerCase()) >= 0;
+      const result = await reportKugouListenReward(mixsongid, { force });
+      sendJSON(res, Object.assign({ provider: 'kugou' }, result));
+    } catch (err) {
+      console.error('[KugouListenReward]', err);
+      sendJSON(res, { provider: 'kugou', ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  // 概念版 VIP 到期时间
+  if (pn === '/api/kugou/vip/union') {
+    try {
+      if (!kugouRewardLoggedIn()) { sendJSON(res, { provider: 'kugou', ok: false, skipped: 'NOT_LOGGED_IN' }); return; }
+      sendJSON(res, Object.assign({ provider: 'kugou' }, await kugouLite.liteUnionVip(kugouCookie)));
+    } catch (err) {
+      sendJSON(res, { provider: 'kugou', ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  // 广告奖励：上报激励广告播放领取 VIP 时长（每天上限 8 次、每次约 +3 小时）
+  // 默认后台把当天剩余次数领完并立即返回；once=1 只领一次（同步返回结果）
+  if (pn === '/api/kugou/vip/ad-claim') {
+    try {
+      const flag = (k) => ['1', 'true', 'yes'].indexOf(String(url.searchParams.get(k) || '').toLowerCase()) >= 0;
+      const force = flag('force');
+      if (flag('once')) {
+        sendJSON(res, Object.assign({ provider: 'kugou', once: true }, await claimKugouAdReward({ reason: force ? 'manual-force' : 'manual', force })));
+        return;
+      }
+      pumpKugouAdReward('manual').catch((e) => console.warn('[KugouAdReward] manual pump failed:', e && e.message));
+      sendJSON(res, { provider: 'kugou', ok: true, started: true, ledger: readKugouRewardState().adReward || null });
+    } catch (err) {
+      console.error('[KugouAdReward]', err);
+      sendJSON(res, { provider: 'kugou', ok: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  // 当天奖励落盘账本（诊断 / 界面展示用）
+  if (pn === '/api/kugou/vip/reward-state') {
+    sendJSON(res, { provider: 'kugou', day: localDayKey(), loggedIn: kugouRewardLoggedIn(), adRewardEnabled: kugouAdRewardEnabled(), state: readKugouRewardState() });
+    return;
+  }
+
+  // 奖励汇总（账号面板一次拿全）：VIP 档位/到期 + 广告奖励进度 + 听歌奖励 + 每日领取
+  // 兜底原则：任何一步失败都不抛错，返回 200 + degraded/note，让界面能退化展示
+  if (pn === '/api/kugou/vip/reward-summary') {
+    const today = localDayKey();
+    const result = {
+      provider: 'kugou',
+      ok: true,
+      day: today,
+      loggedIn: false,
+      degraded: false,
+      note: '',
+      vip: { level: 'none', label: '无VIP', expireAt: '', isVip: false, source: 'none' },
+      ad: { enabled: kugouAdRewardEnabled(), state: 'unknown', done: 0, total: 8, remain: 0, remainVipHour: 0, awardVipHour: 0, message: '' },
+      listen: { state: 'unknown', message: '' },
+      daily: { state: 'unknown', message: '' },
+    };
+    try {
+      result.loggedIn = kugouRewardLoggedIn();
+      const uid = result.loggedIn ? String(extractKugouAuth(kugouCookie).userid || '') : '';
+      // 账本（本地兜底数据源）
+      const ledger = readKugouRewardState();
+      const sameDay = (entry) => !!(entry && entry.day === today && String(entry.userid || '') === uid);
+      const daily = ledger.dailyVip;
+      if (sameDay(daily)) {
+        result.daily = { state: (daily.ok || daily.already) ? 'claimed' : 'pending', message: daily.message || '', at: Number(daily.at) || 0 };
+      }
+      const listen = ledger.listenReport;
+      if (sameDay(listen)) {
+        result.listen = { state: (listen.ok || listen.already) ? 'claimed' : 'pending', message: listen.message || '', at: Number(listen.at) || 0 };
+      }
+      const ad = ledger.adReward;
+      if (!result.ad.enabled) {
+        result.ad = Object.assign(result.ad, { state: 'disabled', message: '广告奖励已在启动参数中关闭' });
+      } else if (!sameDay(ad)) {
+        result.ad = Object.assign(result.ad, { state: 'unknown', remain: 8, message: '今日尚未领取' });
+      } else {
+        const done = Number(ad.done) || 0;
+        const total = Number(ad.total) || 8;
+        const remain = Math.max(0, total - done);
+        let state = 'pending';
+        if (ad.exhausted || remain === 0) state = 'done';
+        else if (adRewardPumping) state = 'running';
+        else if (ad.at && (Date.now() - Number(ad.at) < KUGOU_AD_REWARD_INTERVAL_MS)) state = 'throttled';
+        result.ad = Object.assign(result.ad, {
+          state,
+          done,
+          total,
+          remain,
+          remainVipHour: Number(ad.remainVipHour) || 0,
+          awardVipHour: Number(ad.awardVipHour) || 0,
+          message: ad.message || '',
+          at: Number(ad.at) || 0,
+        });
+      }
+      if (!result.loggedIn) {
+        result.ok = false;
+        result.note = '未登录酷狗概念版';
+        sendJSON(res, result);
+        return;
+      }
+      // VIP 档位 / 到期（线上为准，失败退回账本里的提示）
+      try {
+        const vip = await kugouLite.liteVipDetail(kugouCookie);
+        if (vip && (vip.ok || vip.isVip)) {
+          result.vip = {
+            level: vip.vipLevel || 'none',
+            label: vip.vipLevel === 'svip' ? 'SVIP' : (vip.vipLevel === 'vip' ? 'VIP' : '无VIP'),
+            expireAt: vip.expireAt || '',
+            isVip: !!vip.isVip,
+            source: 'live',
+          };
+        } else {
+          result.degraded = true;
+          result.note = '会员状态读取失败（已按本地账本展示）';
+        }
+      } catch (vipErr) {
+        result.degraded = true;
+        result.note = '会员状态读取失败（已按本地账本展示）';
+        console.warn('[KugouRewardSummary] vip failed:', (vipErr && vipErr.message) || vipErr);
+      }
+      sendJSON(res, result);
+    } catch (err) {
+      console.warn('[KugouRewardSummary] failed:', (err && err.message) || err);
+      // 完全不抛：返回可展示的降级结果
+      sendJSON(res, Object.assign({}, result, { ok: false, degraded: true, note: '奖励信息读取失败，请稍后重试' }));
+    }
+    return;
+  }
+
+  // 已购单曲 / 已购专辑（type=songs|albums，默认 songs）
+  if (pn === '/api/kugou/user/purchased') {
+    try {
+      if (!kugouRewardLoggedIn()) { sendJSON(res, { provider: 'kugou', ok: false, skipped: 'NOT_LOGGED_IN' }); return; }
+      const type = url.searchParams.get('type') || 'songs';
+      const page = url.searchParams.get('page') || 1;
+      const pagesize = url.searchParams.get('pagesize') || 50;
+      sendJSON(res, Object.assign({ provider: 'kugou' }, await kugouLite.litePurchased(type, kugouCookie, page, pagesize)));
+    } catch (err) {
+      console.error('[KugouPurchased]', err);
+      sendJSON(res, { provider: 'kugou', ok: false, error: err.message }, 500);
     }
     return;
   }
@@ -5636,7 +6157,23 @@ const server = http.createServer(async (req, res) => {
 
   if (pn === '/api/kugou/user/playlists') {
     try {
-      sendJSON(res, await handleKugouUserPlaylists(kugouCookie));
+      const auth = extractKugouAuth(kugouCookie);
+      let result = null;
+      if (auth && auth.userid && auth.userid !== '0' && auth.token) {
+        // 概念版歌单优先
+        result = await kugouLite.liteUserPlaylists(kugouCookie);
+        if (!result.ok || !result.playlists.length) {
+          result = null;
+        }
+      }
+      if (!result) {
+        result = await handleKugouUserPlaylists(kugouCookie);
+      }
+      sendJSON(res, {
+        provider: 'kugou',
+        loggedIn: true,
+        playlists: result.playlists || (result && result.playlists) || [],
+      });
     } catch (err) {
       console.error('[KugouUserPlaylists]', err);
       sendJSON(res, { provider: 'kugou', loggedIn: false, error: err.message, playlists: [] }, 500);
@@ -5650,7 +6187,21 @@ const server = http.createServer(async (req, res) => {
       const paged = url.searchParams.has('limit') || url.searchParams.has('offset');
       const limit = Math.max(10, Math.min(50, parseInt(url.searchParams.get('limit') || '50', 10) || 50));
       const offset = Math.max(0, parseInt(url.searchParams.get('offset') || '0', 10) || 0);
-      sendJSON(res, await handleKugouPlaylistTracks(id, kugouCookie, paged ? { limit, offset, paged: true } : {}));
+      const auth = extractKugouAuth(kugouCookie);
+      let result = null;
+      let liteOk = false;
+      if (auth && auth.userid && auth.userid !== '0' && auth.token) {
+        // 概念版优先；空歌单（0 首）是正常结果，不回退标准版
+        result = await kugouLite.litePlaylistTracks(id, kugouCookie);
+        liteOk = !!(result && result.ok);
+        if (liteOk) {
+          result = { provider: 'kugou', tracks: result.songs || [], total: (result.songs || []).length };
+        }
+      }
+      if (!liteOk) {
+        result = await handleKugouPlaylistTracks(id, kugouCookie, paged ? { limit, offset, paged: true } : {});
+      }
+      sendJSON(res, result);
     } catch (err) {
       console.error('[KugouPlaylistTracks]', err);
       sendJSON(res, { provider: 'kugou', error: err.message, tracks: [] }, 500);
@@ -6713,5 +7264,7 @@ server.listen(PORT, HOST, () => {
 });
 
 server.clearAllLoginCredentials = clearAllRuntimeLoginCredentials;
+server.saveKugouCookie = saveKugouCookie;
+server.getKugouCookie = () => kugouCookie;
 
 module.exports = server;

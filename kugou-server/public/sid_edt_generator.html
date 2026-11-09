@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>SID / EDT 生成器</title>
+
+    <!--
+      ============================================================
+      加密 API 拦截层（必须在 verifycode.js 之前加载）
+      ============================================================
+      通过 monkey-patch SubtleCrypto.prototype 上的方法，拦截 WASM 内部的
+      加密/解密/签名/密钥导入等操作，记录到 window.__cryptoLog 数组，
+      用于调试和分析 WASM 的加密流程。
+    -->
+    <script>
+      /** 加密操作日志（拦截到的数据都存到这里） */
+      window.__cryptoLog = [];
+
+      /** CryptoKey → 导入时的元数据映射（WeakMap 避免内存泄漏） */
+      const __keyMap = new WeakMap();
+
+      /**
+       * ArrayBuffer / TypedArray 转 hex 字符串
+       * @param {ArrayBuffer|TypedArray} buf - 二进制缓冲区
+       * @returns {string} hex 字符串（每个字节两位，小写）
+       */
+      function ab2hex(buf) {
+        if (!buf) return '';
+        let arr;
+        if (buf instanceof ArrayBuffer) arr = new Uint8Array(buf);
+        else if (ArrayBuffer.isView(buf)) arr = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+        else return String(buf);
+        let s = '';
+        for (let i = 0; i < arr.length; i++) s += arr[i].toString(16).padStart(2, '0');
+        return s;
+      }
+
+      /**
+       * ArrayBuffer 转 UTF-8 字符串（失败时回退为 hex）
+       * @param {ArrayBuffer} buf - 二进制缓冲区
+       * @returns {string} 解码后的字符串
+       */
+      function ab2str(buf) {
+        try {
+          return new TextDecoder().decode(buf);
+        } catch (e) {
+          return ab2hex(buf);
+        }
+      }
+
+      /**
+       * 将算法描述对象序列化为 JSON 字符串
+       * 自动处理 ArrayBuffer/Uint8Array 类型的值，转为 hex
+       * @param {Object} a - Web Crypto API 的算法描述对象
+       * @returns {string} JSON 字符串
+       */
+      function algoStr(a) {
+        try {
+          return JSON.stringify(a, function (k, v) {
+            if (v instanceof ArrayBuffer) return ab2hex(v);
+            if (v instanceof Uint8Array) return ab2hex(v);
+            return v;
+          });
+        } catch (e) {
+          return String(a);
+        }
+      }
+    </script>
+
+    <!-- 引入 WASM 验证码工具包（提供 wasm_bindgen 全局对象） -->
+    <script src="verify-pkg/verifycode.js"></script>
+
+    <script>
+      /**
+       * ============================================================
+       * Web Crypto API 拦截补丁
+       * ============================================================
+       *
+       * 在 verifycode.js 加载之后（wasm_bindgen.init 已定义）、
+       * wasm_bindgen() 调用之前（WASM 还没执行）注入，
+       * 这样 WASM 内部调用的加密操作都会被记录。
+       *
+       * 拦截的方法：
+       * - encrypt: AES/RSA 加密
+       * - decrypt: AES/RSA 解密
+       * - sign: RSA 签名
+       * - importKey: 密钥导入（记录原始密钥数据）
+       * - generateKey: 密钥生成
+       * - getRandomValues: 随机数生成
+       */
+
+      // 保存原始方法引用
+      const origEncrypt = SubtleCrypto.prototype.encrypt;
+      const origDecrypt = SubtleCrypto.prototype.decrypt;
+      const origSign = SubtleCrypto.prototype.sign;
+      const origImportKey = SubtleCrypto.prototype.importKey;
+      const origGenerateKey = SubtleCrypto.prototype.generateKey;
+
+      /**
+       * 拦截 encrypt：记录算法、明文、密钥信息和密文
+       */
+      SubtleCrypto.prototype.encrypt = function (algorithm, key, data) {
+        const ki = __keyMap.get(key);
+        const entry = {
+          op: 'encrypt',
+          algo: algoStr(algorithm),
+          plaintext: ab2str(data),
+          plaintextHex: ab2hex(data),
+          keyType: key.type,
+          keyAlgorithm: JSON.stringify(key.algorithm),
+          keyUsages: key.usages,
+        };
+        if (ki) {
+          entry.importedKey = ki.keyDataHex;
+          entry.importedAlgo = ki.algorithm;
+        }
+        window.__cryptoLog.push(entry);
+        const p = origEncrypt.call(this, algorithm, key, data);
+        p.then(function (result) {
+          entry.ciphertextHex = ab2hex(result);
+          entry.ciphertextLen = result.byteLength;
+        }).catch(function () {});
+        return p;
+      };
+
+      /**
+       * 拦截 decrypt：记录算法、密文和解密后的明文
+       */
+      SubtleCrypto.prototype.decrypt = function (algorithm, key, data) {
+        const ki = __keyMap.get(key);
+        const entry = { op: 'decrypt', algo: algoStr(algorithm), ciphertextHex: ab2hex(data) };
+        if (ki) {
+          entry.importedKey = ki.keyDataHex;
+          entry.importedAlgo = ki.algorithm;
+        }
+        window.__cryptoLog.push(entry);
+        const p = origDecrypt.call(this, algorithm, key, data);
+        p.then(function (result) {
+          entry.plaintext = ab2str(result);
+          entry.plaintextHex = ab2hex(result);
+        }).catch(function () {});
+        return p;
+      };
+
+      /**
+       * 拦截 sign：记录算法、待签名数据和签名结果
+       */
+      SubtleCrypto.prototype.sign = function (algorithm, key, data) {
+        const entry = { op: 'sign', algo: algoStr(algorithm), dataHex: ab2hex(data) };
+        window.__cryptoLog.push(entry);
+        const p = origSign.call(this, algorithm, key, data);
+        p.then(function (result) {
+          entry.signatureHex = ab2hex(result);
+          entry.signatureLen = result.byteLength;
+        }).catch(function () {});
+        return p;
+      };
+
+      /**
+       * 拦截 importKey：记录导入的密钥数据，并建立 CryptoKey → 元数据的映射
+       */
+      SubtleCrypto.prototype.importKey = function (format, keyData, algorithm, extractable, usages) {
+        const ki = {
+          format: format,
+          keyDataHex: ab2hex(keyData),
+          algorithm: algoStr(algorithm),
+          usages: usages,
+        };
+        const p = origImportKey.call(this, format, keyData, algorithm, extractable, usages);
+        p.then(function (cryptoKey) {
+          __keyMap.set(cryptoKey, ki);
+          window.__cryptoLog.push({
+            op: 'importKey',
+            keyDataHex: ki.keyDataHex,
+            algorithm: ki.algorithm,
+            usages: ki.usages,
+          });
+        }).catch(function () {});
+        return p;
+      };
+
+      /**
+       * 拦截 generateKey：记录算法和用途
+       */
+      SubtleCrypto.prototype.generateKey = function (algorithm, extractable, usages) {
+        window.__cryptoLog.push({ op: 'generateKey', algo: algoStr(algorithm), usages: usages });
+        return origGenerateKey.call(this, algorithm, extractable, usages);
+      };
+
+      /**
+       * 拦截 getRandomValues：记录随机数请求的长度
+       */
+      const origGRV = crypto.getRandomValues;
+      crypto.getRandomValues = function (arr) {
+        window.__cryptoLog.push({ op: 'getRandomValues', len: arr.length });
+        return origGRV.call(crypto, arr);
+      };
+    </script>
+
+    <style>
+      /* ========== 全局重置 ========== */
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      /* ========== 页面主体 ========== */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #f5f5f5;
+        padding: 40px 20px;
+      }
+
+      /* ========== 容器 ========== */
+      .container { max-width: 800px; margin: 0 auto; }
+
+      /* ========== 标题 ========== */
+      h2 { font-size: 20px; color: #333; margin-bottom: 20px; text-align: center; }
+
+      /* ========== 按钮 ========== */
+      .btn {
+        display: block; width: 100%; padding: 12px;
+        background: #1677ff; color: #fff; border: none; border-radius: 8px;
+        font-size: 15px; cursor: pointer; margin-bottom: 8px;
+      }
+      .btn:active { opacity: 0.8; }
+      .btn-clear { background: #999; }
+
+      /* ========== 结果区域 ========== */
+      .result { margin-top: 16px; }
+      .field { margin-bottom: 12px; }
+      .field label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
+      .field .val {
+        background: #fff; border: 1px solid #e0e0e0; border-radius: 6px;
+        padding: 10px 12px; font-size: 12px; color: #333;
+        word-break: break-all; font-family: monospace;
+        min-height: 40px; white-space: pre-wrap;
+        max-height: 300px; overflow-y: auto;
+      }
+
+      /* ========== 日志区域 ========== */
+      .log-section { margin-top: 24px; }
+      .log-section h3 { font-size: 15px; color: #333; margin-bottom: 8px; }
+      .log-entry {
+        background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
+        padding: 12px; margin-bottom: 8px; font-size: 12px; font-family: monospace;
+      }
+      .log-entry .op {
+        display: inline-block; padding: 2px 8px; border-radius: 4px;
+        font-weight: 600; font-size: 11px; margin-bottom: 6px;
+      }
+
+      /* 日志条目类型颜色 */
+      .op-encrypt { background: #fff2f0; color: #ff4d4f; }
+      .op-importKey { background: #e6f4ff; color: #1677ff; }
+      .op-decrypt { background: #f6ffed; color: #52c41a; }
+      .op-generateKey { background: #fffbe6; color: #faad14; }
+      .op-sign { background: #f9f0ff; color: #722ed1; }
+      .op-getRandomValues { background: #f5f5f5; color: #666; }
+
+      /* 日志行 */
+      .log-row { display: flex; gap: 8px; margin-bottom: 3px; }
+      .log-label { color: #999; min-width: 100px; flex-shrink: 0; }
+      .log-value { color: #333; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>SID / EDT 生成器</h2>
+
+      <!-- 操作按钮 -->
+      <button class="btn" id="generate">生成</button>
+      <button class="btn btn-clear" id="clearLog">清除日志</button>
+
+      <!-- 生成结果 -->
+      <div class="result">
+        <div class="field">
+          <label>sid（RSA-OAEP 加密的 AES 密钥，Base64）</label>
+          <div class="val" id="outSid"></div>
+        </div>
+        <div class="field">
+          <label>edt（AES-128-CBC 加密的行为数据，Base64）</label>
+          <div class="val" id="outEdt"></div>
+        </div>
+      </div>
+
+      <!-- 加密 API 拦截日志 -->
+      <div class="log-section">
+        <h3>Crypto API 拦截日志</h3>
+        <div id="logContainer"></div>
+      </div>
+    </div>
+
+    <script>
+      /**
+       * ============================================================
+       * SID / EDT 生成器主逻辑
+       * ============================================================
+       *
+       * 功能：
+       * 1. 加载 WASM 模块（verifycode_bg.wasm）
+       * 2. 点击"生成"按钮，调用 wasm_bindgen.EData 生成 sid 和 edt
+       * 3. 渲染拦截到的 Crypto API 调用日志（加密、密钥导入等）
+       *
+       * 用途：
+       * - 调试 WASM 的加密流程，分析 sid/edt 的生成过程
+       * - 查看 AES 密钥、RSA 公钥、加密明文等中间数据
+       */
+      (async () => {
+        // ========== DOM 元素引用 ==========
+        const btn = document.getElementById('generate');        // 生成按钮
+        const outSid = document.getElementById('outSid');       // sid 输出区域
+        const outEdt = document.getElementById('outEdt');       // edt 输出区域
+        const logContainer = document.getElementById('logContainer'); // 日志容器
+
+        /**
+         * 渲染加密 API 拦截日志
+         * 从 window.__cryptoLog 数组读取，按倒序排列（最新的在最上面）
+         */
+        function renderLog() {
+          const logs = window.__cryptoLog;
+          if (!logs.length) {
+            logContainer.innerHTML = '<div style="color:#999;font-size:13px">暂无加密调用记录。</div>';
+            return;
+          }
+          let html = '';
+          for (let i = logs.length - 1; i >= 0; i--) {
+            const e = logs[i];
+            const opClass = 'op-' + (e.op || 'unknown');
+            html += '<div class="log-entry">';
+            html += '<div class="op ' + opClass + '">' + e.op + '</div>';
+            for (const k of Object.keys(e)) {
+              // 跳过内部字段
+              if (k === 'op' || k === 'timestamp' || k === 'keyId' || k === '_keyInfo') continue;
+              html += '<div class="log-row"><span class="log-label">' + k + ':</span><span class="log-value">' + e[k] + '</span></div>';
+            }
+            html += '</div>';
+          }
+          logContainer.innerHTML = html;
+        }
+
+        // 清除日志按钮
+        document.getElementById('clearLog').addEventListener('click', () => {
+          window.__cryptoLog.length = 0;
+          renderLog();
+        });
+
+        /**
+         * 初始化应用：加载 WASM 模块
+         */
+        async function initApp() {
+          try {
+            if (typeof wasm_bindgen !== 'undefined') {
+              await wasm_bindgen('./verify-pkg/verifycode_bg.wasm');
+              wasm_bindgen.run();
+              console.log('[WASM] Loaded successfully');
+            }
+          } catch (e) {
+            console.warn('[WASM] initialization failed:', e);
+          }
+
+          renderLog();
+
+          // 生成按钮点击事件
+          btn.addEventListener('click', () => {
+            btn.disabled = true;
+            btn.textContent = '生成中...';
+            outSid.textContent = '';
+            outEdt.textContent = '';
+
+            setTimeout(() => {
+              try {
+                if (typeof wasm_bindgen !== 'undefined' && wasm_bindgen.EData) {
+                  const e = new wasm_bindgen.EData();
+                  outSid.textContent = e.get_sid();
+                  outEdt.textContent = e.get_edt();
+                } else {
+                  outSid.textContent = '(WASM 未加载)';
+                }
+              } catch (err) {
+                outSid.textContent = 'Error: ' + err.message;
+              }
+              // 等待异步 .then() 回调填充日志后再渲染
+              setTimeout(function () {
+                renderLog();
+                btn.disabled = false;
+                btn.textContent = '生成';
+              }, 200);
+            }, 50);
+          });
+        }
+
+        await initApp();
+      })();
+    </script>
+  </body>
+</html>

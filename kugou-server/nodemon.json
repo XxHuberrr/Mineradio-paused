@@ -1,0 +1,25 @@
+{
+  "restartable": "rs",
+  "ignore": [
+    ".git",
+    "node_modules/",
+    "dist/",
+    "coverage/"
+  ],
+  "watch": [
+    "module/**",
+    "plugins/**",
+    "util/**",
+    "types/**",
+    "./server.js",
+    "./index.js",
+    "./main.js"
+  ],
+  "execMap": {
+    "js": "node "
+  },
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "ext": "js,json,ts"
+}

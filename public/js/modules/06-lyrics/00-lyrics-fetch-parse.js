@@ -57,7 +57,7 @@ function writePersistentLyricCache(song, payload) {
 }
 
 function lyricQueuePrefetchCandidate(song) {
-  if (!song || song.type === 'podcast' || song.type === 'local' || song.source === 'local' || song.localUrl) return false;
+  if (!song || song.type === 'podcast' || song.source === 'podcast') return false;
   return !!(song.id || song.mid || song.songmid || song.hash || song.name || song.title);
 }
 
@@ -155,7 +155,7 @@ function lyricTranslationFallbackKey(song) {
 }
 function shouldFetchNeteaseLyricTranslationFallback(song, state) {
   if (!song || !state || !state.usableLyric) return false;
-  if (song.type === 'local' || song.source === 'local' || song.localUrl || song.type === 'podcast') return false;
+  if (song.type === 'podcast' || song.source === 'podcast') return false;
   if (songProviderKey(song) === 'netease') return false;
   if (state.translationLines && state.translationLines.length) return false;
   if (!String(song.name || song.title || '').trim()) return false;
@@ -293,7 +293,7 @@ function parseLyricResponseToOriginalState(song, response) {
 }
 function shouldRetryStartupLyricFetch(song, token, attempt) {
   if (!song || token !== trackSwitchToken || (attempt || 0) >= 3) return false;
-  if (song.type === 'local' || song.source === 'local' || song.localKey || song.type === 'podcast') return false;
+  if (song.type === 'podcast' || song.source === 'podcast') return false;
   return !!(startupAutoplayPreference || restoredLastPlaybackSnapshot || pendingPlaybackResumeAt > 0);
 }
 function scheduleStartupLyricFetchRetry(song, token, attempt) {
@@ -333,6 +333,105 @@ function scheduleTrackSwitchFallbackLyrics(song, token, delay) {
     applyPreferredLyricsForCurrent(true);
   }, Math.max(multiLineDelay, Number(delay) || 720));
 }
+function isLocalSongObject(song) {
+  return !!(song && (song.type === 'local' || song.source === 'local' || song.localKey || song.localUrl));
+}
+function parseLocalSongTitleArtist(song) {
+  var name = String((song && (song.name || song.title)) || '').trim();
+  var artist = String((song && song.artist) || '').trim();
+  if (artist && artist !== '本地文件' && artist !== '未知歌手') return { title: name, artist: artist, rawName: name };
+  var m = name.match(/^(.*?)\s*[-\u2013\u2014]\s*(.+)$/);
+  if (m) {
+    return {
+      title: m[1].trim(),
+      artist: m[2].trim(),
+      altTitle: m[2].trim(),
+      altArtist: m[1].trim(),
+      rawName: name,
+    };
+  }
+  return { title: name, artist: '', rawName: name };
+}
+function findLocalSongLyricCandidate(parsed, list) {
+  if (!Array.isArray(list) || !list.length) return null;
+  var titleVariants = [parsed.title, parsed.altTitle, parsed.rawName].filter(Boolean);
+  var artistVariants = [parsed.artist, parsed.altArtist].filter(Boolean);
+  for (var i = 0; i < list.length; i++) {
+    var candidate = list[i];
+    if (!candidate) continue;
+    for (var t = 0; t < titleVariants.length; t++) {
+      var titleHit = typeof normalizeMatchText === 'function'
+        ? normalizeMatchText(candidate.name || candidate.title) === normalizeMatchText(titleVariants[t])
+        : String(candidate.name || candidate.title) === String(titleVariants[t]);
+      if (!titleHit) continue;
+      if (!artistVariants.length) return candidate;
+      var candArtists = typeof artistNameParts === 'function'
+        ? artistNameParts(candidate)
+        : [String(candidate.artist || '')];
+      for (var a = 0; a < artistVariants.length; a++) {
+        if (candArtists.some(function (ca) { return String(ca || '') === artistVariants[a]; })) return candidate;
+      }
+    }
+  }
+  var best = null, bestScore = 0;
+  for (var j = 0; j < list.length; j++) {
+    var score = typeof scoreSongSearchResult === 'function' ? scoreSongSearchResult(list[j], parsed.rawName || parsed.title, 0) : 0;
+    if (score > bestScore) { bestScore = score; best = list[j]; }
+  }
+  return bestScore >= 28 ? best : null;
+}
+async function readLocalDiskLyric(song) {
+  try {
+    var diskPath = String((song && song.localDiskPath) || '');
+    if (!diskPath || !window.desktopWindow || typeof window.desktopWindow.readLocalLyric !== 'function') return null;
+    var result = await window.desktopWindow.readLocalLyric(diskPath);
+    if (result && result.ok && result.lyric) return { lyric: result.lyric, source: result.source || 'local' };
+    return null;
+  } catch (e) {
+    console.warn('[LocalSongLyric] readLocalLyric failed:', e);
+    return null;
+  }
+}
+async function fetchLocalSongLyric(song, token) {
+  if (!song || token !== trackSwitchToken) return null;
+  // 1) 本地文件歌词优先：同目录 .lrc / 内嵌标签
+  var localDisk = await readLocalDiskLyric(song);
+  if (token !== trackSwitchToken) return null;
+  if (localDisk && localDisk.lyric) {
+    return { lyric: localDisk.lyric, tlyric: '', yrc: '', source: localDisk.source };
+  }
+  // 2) 在线兜底：按 歌名+歌手 搜索匹配
+  var parsed = parseLocalSongTitleArtist(song);
+  if (!parsed.title) return null;
+  var query = parsed.rawName || (parsed.artist ? parsed.title + ' ' + parsed.artist : parsed.title);
+  var attempts = [
+    {
+      label: 'kugou',
+      pick: function (data) { return data && (data.songs || []); },
+      run: function () { return apiJson('/api/kugou/search?keywords=' + encodeURIComponent(query) + '&limit=8', { timeoutMs: 4800 }); },
+      lyric: function (candidate) { return candidate && candidate.hash ? apiJson(lyricEndpointForSong(candidate), { timeoutMs: 5200 }) : null; },
+    },
+    {
+      label: 'netease',
+      pick: function (data) { return data && (data.songs || data.result || []); },
+      run: function () { return apiJson('/api/search?keywords=' + encodeURIComponent(query) + '&limit=8', { timeoutMs: 4800 }); },
+      lyric: function (candidate) { return candidate && candidate.id ? apiJson('/api/lyric?id=' + encodeURIComponent(candidate.id), { timeoutMs: 5200 }) : null; },
+    },
+  ];
+  for (var i = 0; i < attempts.length; i++) {
+    if (token !== trackSwitchToken) return null;
+    try {
+      var data = await attempts[i].run();
+      var candidate = findLocalSongLyricCandidate(parsed, attempts[i].pick(data));
+      if (!candidate) continue;
+      var resp = await attempts[i].lyric(candidate);
+      if (resp && (resp.lyric || resp.yrc)) return resp;
+    } catch (err) {
+      console.warn('[LocalSongLyric]', attempts[i].label, err);
+    }
+  }
+  return null;
+}
 async function fetchLyric(songOrId, token, attempt) {
   attempt = Math.max(0, Number(attempt) || 0);
   var song;
@@ -346,7 +445,12 @@ async function fetchLyric(songOrId, token, attempt) {
         return;
       }
     }
-    var r = await apiJson(lyricEndpointForSong(song || songOrId));
+    var r;
+    if (isLocalSongObject(song)) {
+      r = (await fetchLocalSongLyric(song, token)) || {};
+    } else {
+      r = await apiJson(lyricEndpointForSong(song || songOrId));
+    }
     var state = applyFetchedLyricResponse(song, token, r);
     if (!state) return;
     if (!state.usableLyric && shouldRetryStartupLyricFetch(song, token, attempt)) scheduleStartupLyricFetchRetry(song, token, attempt);

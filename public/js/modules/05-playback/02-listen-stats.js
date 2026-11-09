@@ -259,6 +259,10 @@ function finalizeListenSession(completed) {
     context: session.context || null,
   };
   listenStatsState.history = [record].concat((listenStatsState.history || []).filter(function (item) { return item && item.key !== record.key; })).slice(0, 180);
+  // 酷狗概念版听歌奖励：自然播完的酷狗歌曲自动上报（失败/未登录会被静默跳过）
+  if (completed && typeof maybeReportKugouListenReward === 'function') {
+    try { maybeReportKugouListenReward(record); } catch (e) { console.warn('[KugouListenReward] hook failed:', e && e.message); }
+  }
   var songStat = listenStatsState.songs[record.key] || { key: record.key, name: record.name, artist: record.artist, cover: record.cover, source: record.source, plays: 0, listenMs: 0, completed: 0, lastPlayedAt: 0 };
   songStat.name = record.name;
   songStat.artist = record.artist;

@@ -10,6 +10,8 @@ var loginWorkflowEdgeRenderFrame = 0;
 var loginWorkflowEdgeRenderTimers = [];
 var SPOTIFY_DEVELOPER_DASHBOARD_URL = 'https://developer.spotify.com/dashboard';
 var SPOTIFY_REDIRECT_URI = 'http://127.0.0.1:43879/callback';
+// 当前二维码所属的登录 provider（概念版酷狗扫码用：区分「正在展示的二维码」是谁的）
+var qrProvider = '';
 var spotifySetupCallbackReady = false;
 var spotifySetupDiagnostics = null;
 var spotifySetupBusy = false;
@@ -588,7 +590,10 @@ async function showLoginModal(opts) {
 }
 function resumeLoginModalAfterGate() {
   bindLoginWorkflowPointerEvents();
-  setLoginAuthDrawerOpen(false);
+  // 竞态修复：若 kugou 概念版 QR 已生成（用户先点了「连接登录」），
+  // 不能在此关 drawer，否则 gate 解锁后会把正在显示的二维码面板关掉
+  var qrActive = (typeof qrKey !== 'undefined' && qrKey && qrProvider === 'kugou');
+  if (!qrActive) setLoginAuthDrawerOpen(false);
   updateLoginProviderUi();
   scheduleLoginWorkflowEdges('open');
 }
@@ -1000,7 +1005,8 @@ function updateLoginProviderUi() {
       : '使用 <b>网易云音乐 App</b> 扫码，可同步歌单、红心与播客。')));
   var manualCookieOpen = isManualCookieOpenForProvider(loginProvider);
   if (shell) {
-    var useWebPreview = isQQ || isKugou || (isNetease && (canOpenNeteaseWeb || manualCookieOpen));
+    // kugou 不参与 web-login-preview：概念版直接显示 QR，避免 .qr-shell.web-login-preview #qr-img { display:none } 隐藏二维码
+    var useWebPreview = isQQ || (isNetease && (canOpenNeteaseWeb || manualCookieOpen));
     shell.classList.toggle('web-login-preview', useWebPreview);
     shell.classList.toggle('qq-preview', isQQ);
     shell.classList.toggle('netease-preview', isNetease && canOpenNeteaseWeb);
@@ -1117,17 +1123,49 @@ async function refreshQr() {
     return;
   }
   if (loginProvider === 'kugou') {
-    qrKey = null;
     var kugouStatus = document.getElementById('qr-status');
     var kugouImg = document.getElementById('qr-img');
-    if (kugouImg) kugouImg.src = '';
     var kugouInfo = await refreshKugouLoginStatus();
     if (!isLoginRefreshCurrent(refreshProvider, refreshSeq)) return;
-    if (kugouStatus) {
-      kugouStatus.textContent = kugouInfo && kugouInfo.loggedIn ? ('已保存酷狗音乐会话 · ' + (kugouInfo.nickname || '')) : '点击“登录”打开酷狗音乐官方窗口';
-      kugouStatus.className = 'preview';
+
+    if (kugouInfo && kugouInfo.loggedIn) {
+      qrKey = null;
+      if (kugouImg) kugouImg.src = '';
+      if (kugouStatus) {
+        kugouStatus.textContent = '已保存酷狗音乐会话 · ' + (kugouInfo.nickname || '');
+        kugouStatus.className = 'preview';
+      }
+      return;
     }
-    return;
+
+    // 概念版：创建二维码扫码登录
+    try {
+      qrKey = null;
+      if (kugouImg) kugouImg.src = '';
+      if (kugouStatus) { kugouStatus.textContent = '正在生成酷狗概念版二维码…'; kugouStatus.className = ''; }
+
+      var api = window.desktopWindow;
+      if (api && typeof api.createKugouQrLogin === 'function') {
+        var qrResult = await api.createKugouQrLogin();
+        if (!isLoginRefreshCurrent(refreshProvider, refreshSeq)) return;
+        if (qrResult && qrResult.ok && qrResult.key) {
+          qrKey = qrResult.key;
+          qrProvider = 'kugou';
+          if (kugouImg && qrResult.qrImgUrl) kugouImg.src = qrResult.qrImgUrl;
+          else if (kugouImg && qrResult.qrUrl) kugouImg.src = qrResult.qrUrl;
+          if (kugouStatus) { kugouStatus.textContent = '请使用酷狗音乐概念版 App 扫码登录'; kugouStatus.className = ''; }
+          startQrPoll();
+          return;
+        }
+        throw new Error(qrResult.error || '创建二维码失败');
+      }
+      throw new Error('QR 登录模块未加载');
+    } catch (e) {
+      if (!isLoginRefreshCurrent(refreshProvider, refreshSeq)) return;
+      if (kugouImg) kugouImg.src = '';
+      if (kugouStatus) { kugouStatus.textContent = 'QR 码生成失败: ' + (e.message || '请稍后重试') + '，可尝试网页登录'; kugouStatus.className = 'fail'; }
+      return;
+    }
   }
   if (window.desktopWindow && typeof window.desktopWindow.openNeteaseMusicLogin === 'function') {
     qrKey = null;
@@ -1428,51 +1466,14 @@ async function openQQWebLogin() {
 }
 async function openKugouWebLogin() {
   if (kugouWebLoginBusy) return;
-  var statusEl = document.getElementById('qr-status');
-  var api = window.desktopWindow;
-  if (!api || !api.isDesktop || typeof api.openKugouMusicLogin !== 'function') {
-    kugouManualCookieOpen = true;
-    updateLoginProviderUi();
-    if (statusEl) { statusEl.textContent = '当前环境不支持自动网页登录，可先使用手动导入。'; statusEl.className = 'fail'; }
-    return;
-  }
-
+  // 概念版：不再打开浏览器窗口，直接刷新显示二维码
   kugouWebLoginBusy = true;
-  updateLoginProviderUi();
-  if (statusEl) { statusEl.textContent = '已打开酷狗音乐窗口，请完成官方登录…'; statusEl.className = 'preview'; }
   try {
-    var result = await api.openKugouMusicLogin({ forceReauth: true });
-    if (!result || !result.ok || !result.cookie) {
-      throw new Error((result && (result.message || result.error)) || '酷狗登录未完成');
-    }
-    if (statusEl) { statusEl.textContent = '正在同步酷狗音乐会话…'; statusEl.className = 'preview'; }
-    var info = await apiJson('/api/kugou/login/cookie', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cookie: result.cookie })
-    });
-    if (!info || !info.loggedIn) throw new Error((info && (info.message || info.error)) || '酷狗会话不可用');
-    kugouLoginStatus = normalizeKugouLoginStatus(info);
-    activeAccountProvider = 'kugou';
-    kugouManualCookieOpen = false;
-    renderUserBtn();
-    refreshUserPlaylists(true);
-    offerLoginCookieExport('kugou', info);
-    var ready = !!info.playbackKeyReady && !result.partial;
-    if (statusEl) { statusEl.textContent = ready ? '酷狗音乐会话已保存' : '酷狗账号已同步，播放授权不完整，部分歌曲可能需要重登'; statusEl.className = 'scan'; }
-    setTimeout(function () {
-      closeLoginModal();
-      showToast((ready ? '酷狗音乐已登录: ' : '酷狗账号已同步: ') + (info.nickname || info.userId || ''));
-    }, 420);
-  } catch (e) {
-    kugouWebLoginBusy = false;
-    updateLoginProviderUi();
-    if (statusEl) { statusEl.textContent = e && e.message ? e.message : '酷狗登录失败'; statusEl.className = 'fail'; }
+    // 确保登录面板 drawer 展开（点「连接登录」按钮不会自动打开）
+    setLoginAuthDrawerOpen(true);
+    await refreshQr();
   } finally {
-    if (kugouWebLoginBusy) {
-      kugouWebLoginBusy = false;
-      updateLoginProviderUi();
-    }
+    kugouWebLoginBusy = false;
   }
 }
 async function openQishuiWebLogin() {
@@ -1573,6 +1574,34 @@ async function submitNeteaseCookieLogin() {
 }
 async function checkQr() {
   if (!qrKey) return;
+  // 酷狗概念版 QR 轮询
+  if (qrProvider === 'kugou') {
+    try {
+      var api = window.desktopWindow;
+      if (!api || typeof api.checkKugouQrLogin !== 'function') { stopQrPoll(); return; }
+      var kgResult = await api.checkKugouQrLogin(qrKey);
+      console.log('[KugouQR-poll] result:', JSON.stringify(kgResult));
+      var $st = document.getElementById('qr-status');
+      if (kgResult && kgResult.status === 'scanned') {
+        if ($st) { $st.textContent = '已扫码，请在手机确认登录…'; $st.className = 'scan'; }
+      } else if (kgResult && kgResult.status === 'confirmed') {
+        if ($st) { $st.textContent = '登录成功！' + (kgResult.nickname ? ' 欢迎 ' + kgResult.nickname : ''); $st.className = 'scan'; }
+        stopQrPoll();
+        qrProvider = '';
+        setTimeout(async function () {
+          await refreshKugouLoginStatus();
+          await refreshLoginStatus(true);
+          closeLoginModal();
+          showToast('酷狗概念版登录成功 🎵');
+        }, 600);
+      } else if (kgResult && (kgResult.status === 'expired' || kgResult.status === 'cancelled')) {
+        if ($st) { $st.textContent = kgResult.status === 'expired' ? '二维码已过期，点击刷新' : '已取消'; $st.className = 'fail'; }
+        stopQrPoll();
+        qrProvider = '';
+      }
+    } catch (e) { console.warn('Kugou QR poll:', e); }
+    return;
+  }
   try {
     var r = await apiJson('/api/login/qr/check?key=' + encodeURIComponent(qrKey));
     var $st = document.getElementById('qr-status');

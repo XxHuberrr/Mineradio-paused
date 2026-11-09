@@ -1,6 +1,10 @@
 'use strict';
 
 (function loadMineradioIndexModules() {
+  // 禁用鼠标侧键（后退/前进），防止误触导致页面重载
+  window.addEventListener('mouseup', function (e) {
+    if (e.button === 3 || e.button === 4) { e.preventDefault(); }
+  }, true);
   const moduleCacheBust = String(Date.now());
   const modulePaths = [
     'js/modules/00-state/00-core-stores.js',
@@ -100,6 +104,7 @@
     'js/modules/08-account/03-login-modal-flows.js',
     'js/modules/08-account/04-user-modal-logout.js',
     'js/modules/08-account/05-startup-login-guide.js',
+    'js/modules/08-account/06-kugou-rewards.js',
     'js/modules/09-idle-toast-libraries.js',
     'js/modules/10-shell/00-gesture-control.js',
     'js/modules/10-shell/01-viewport-resize-shortcuts.js',

@@ -382,6 +382,82 @@ function startKugouLoginStatusAutoRefresh() {
   }, 45000);
 }
 
+// 登录面板右上角「刷新状态」：清服务端缓存并强制重新拉取登录态/VIP（手机上领了 VIP 后可立即同步）
+async function refreshAccountLoginStatus() {
+  var btn = document.getElementById('login-status-refresh-btn');
+  var label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '刷新中…'; }
+  try {
+    var info = await apiJson('/api/kugou/login/refresh?t=' + Date.now(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    if (info && info.provider === 'kugou') {
+      kugouLoginStatus = normalizeKugouLoginStatus(info);
+      auditProviderVipState('kugou', kugouLoginStatus);
+      kugouLoginWasLoggedIn = !!kugouLoginStatus.loggedIn;
+      if (!hasPlatformLogin(activeAccountProvider)) activeAccountProvider = firstLoggedProvider();
+      renderUserBtn();
+      if (typeof updateLoginProviderUi === 'function') updateLoginProviderUi();
+      if (!kugouLoginStatus.loggedIn) {
+        kugouPlaylists = [];
+        userPlaylists = userPlaylists.filter(function (pl) { return pl && pl.provider !== 'kugou'; });
+        playlistCatalogRevision += 1;
+        showToast('酷狗音乐未登录');
+      } else {
+        var labelText = kugouLoginStatus.vipLevel === 'svip' ? 'SVIP' : (kugouLoginStatus.isVip ? 'VIP' : '无VIP');
+        var expire = kugouLoginStatus.vipExpireAt ? ('，到期 ' + String(kugouLoginStatus.vipExpireAt).slice(0, 10)) : '';
+        showToast('酷狗状态已刷新：' + labelText + expire);
+        var statusEl = document.getElementById('qr-status');
+        if (statusEl && loginProvider === 'kugou') {
+          statusEl.textContent = '已刷新：' + labelText + ' · ' + (kugouLoginStatus.nickname || '');
+          statusEl.className = 'preview';
+        }
+      }
+    }
+    // 顺带刷新其他平台（网易云）状态，避免只刷新单一平台
+    refreshLoginStatus(true).catch(function () {});
+    return kugouLoginStatus;
+  } catch (e) {
+    console.warn('Refresh account login status failed:', e);
+    showToast('刷新失败：' + ((e && e.message) || '请稍后重试'));
+    return null;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label || '刷新状态'; }
+  }
+}
+
+// 听歌奖励：一首歌自然播完后上报（服务端按自然日去重，无需前端记账）
+var kugouListenRewardReportedKeys = {};
+function maybeReportKugouListenReward(record) {
+  try {
+    if (!record || !record.completed) return;
+    if (!kugouLoginStatus || !kugouLoginStatus.loggedIn) return;
+    var mixsongid = Number(record.mixSongId || record.albumAudioId || '');
+    if (!mixsongid || !isFinite(mixsongid)) return;
+    var key = record.key || ('kugou-' + mixsongid);
+    if (kugouListenRewardReportedKeys[key]) return;
+    kugouListenRewardReportedKeys[key] = true;
+    apiJson('/api/kugou/vip/listen-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mixsongid: mixsongid })
+    }).then(function (result) {
+      if (result && (result.ok || result.already)) {
+        console.log('[KugouListenReward] 已上报:', record.name || '', result.already ? '(今日已领)' : '');
+        refreshKugouLoginStatus().catch(function () {});
+      } else if (result && result.skipped) {
+        console.log('[KugouListenReward] 跳过:', result.skipped);
+      }
+    }).catch(function (e) {
+      console.warn('[KugouListenReward] 上报失败:', e && e.message);
+    });
+  } catch (e) {
+    console.warn('[KugouListenReward] error:', e && e.message);
+  }
+}
+
 function normalizeQishuiLoginStatus(info) {
   var fallback = { provider: 'qishui', loggedIn: false, configured: false, oauthConfigured: false, oauthMissing: [], preview: false, nickname: '汽水音乐', userId: '', avatar: '', vipType: 0, vipLevel: 'none', isVip: false, isSvip: false, stale: false, playbackKeyReady: false, playbackMode: 'recommend-match', searchReady: false, publicCatalog: false };
   var configured = !!(info && (info.configured || info.loggedIn));
@@ -556,4 +632,6 @@ function renderUserBtn() {
     requestAnimationFrame(updateLoginNodeGraphUi);
   }
   updatePlaybackQualityUi();
+  // 酷狗概念版「今日奖励」入口按钮：跟随登录状态显示/隐藏与徽标刷新
+  if (typeof syncKugouRewardEntry === 'function') syncKugouRewardEntry();
 }

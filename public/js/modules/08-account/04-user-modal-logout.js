@@ -65,6 +65,10 @@ function updateUserModalUi() {
   if (hint) hint.textContent = dualAccountMode
     ? '右上角已切换为多平台并排展示。'
     : '可切换右上角展示的平台；“我两个都要”会并排显示当前已登录的平台。';
+  // 酷狗概念版「今日奖励」区块：仅在酷狗为当前平台且已登录时展示
+  if (typeof renderKugouRewardPanel === 'function') {
+    try { renderKugouRewardPanel(); } catch (e) { console.warn('Kugou reward panel render failed:', e && e.message); }
+  }
 }
 function showUserModal() {
   if (!hasAnyPlatformLogin()) return showLoginModal();
@@ -74,6 +78,9 @@ function showUserModal() {
     refreshQQVipStatusNow('account-modal')
       .then(updateUserModalUi)
       .catch(function (e) { console.warn('QQ VIP modal refresh failed:', e); });
+  }
+  if (hasPlatformLogin('kugou') && typeof refreshKugouRewardPanel === 'function') {
+    refreshKugouRewardPanel().catch(function (e) { console.warn('Kugou reward refresh failed:', e && e.message); });
   }
 }
 function closeUserModal() { closeGsapModal(document.getElementById('user-modal')); }
@@ -87,6 +94,9 @@ function setActiveAccountProvider(provider) {
   dualAccountMode = false;
   renderUserBtn();
   updateUserModalUi();
+  if (provider === 'kugou' && typeof refreshKugouRewardPanel === 'function') {
+    refreshKugouRewardPanel().catch(function (e) { console.warn('Kugou reward refresh failed:', e && e.message); });
+  }
 }
 function enableDualAccountView() {
   if (loggedProviderCount() < 2) {

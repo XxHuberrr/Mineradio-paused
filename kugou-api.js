@@ -987,7 +987,10 @@ function mapKugouSearchItem(item) {
       : Number(item.rank),
     fee: privilege >= 10 ? 1 : 0,
     privilege,
-    playable: privilege <= 8,
+    vipRequired: privilege >= 10,
+    // 概念版登录后会员曲可播（服务端会自动降到标准音质），所以不按 privilege 判死，
+    // 否则列表会显示误导性的「酷狗播放需会话/授权」
+    playable: true,
     hqHash: item.HQFileHash || '',
     sqHash: item.SQFileHash || '',
     resHash: item.ResFileHash || '',

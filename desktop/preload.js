@@ -70,6 +70,10 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   },
   readLyricCache: (key) => ipcRenderer.invoke('mineradio-cache-read-lyric', key || ''),
   writeLyricCache: (key, payload) => ipcRenderer.invoke('mineradio-cache-write-lyric', key || '', payload || {}),
+  getPathForFile: (file) => {
+    try { return webUtils.getPathForFile(file) || ''; } catch (_) { return ''; }
+  },
+  readLocalLyric: (filePath) => ipcRenderer.invoke('mineradio-read-local-lyric', String(filePath || '')),
   close: (behavior) => ipcRenderer.invoke('desktop-window-close', behavior),
   getCloseBehavior: () => ipcRenderer.invoke('desktop-window-get-close-behavior'),
   setCloseBehavior: (behavior) => ipcRenderer.invoke('desktop-window-set-close-behavior', behavior),
@@ -82,6 +86,8 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   clearQQMusicLogin: () => ipcRenderer.invoke('qq-music-clear-login'),
   openKugouMusicLogin: (options) => ipcRenderer.invoke('kugou-music-open-login', options || {}),
   clearKugouMusicLogin: () => ipcRenderer.invoke('kugou-music-clear-login'),
+  createKugouQrLogin: () => ipcRenderer.invoke('kugou-music-qr-create'),
+  checkKugouQrLogin: (key) => ipcRenderer.invoke('kugou-music-qr-check', String(key || '')),
   clearQishuiMusicLogin: () => ipcRenderer.invoke('qishui-music-clear-login'),
   openUpdatePage: (url) => ipcRenderer.invoke('mineradio-open-update-page', String(url || '')),
   restartApp: () => ipcRenderer.invoke('mineradio-restart-app'),

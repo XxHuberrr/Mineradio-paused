@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>验证码验证</title>
+    <style>
+      /* ========== 全局重置 ========== */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      /* ========== 页面主体：全屏居中 + 渐变背景 ========== */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #e0ecff 0%, #f5f0ff 50%, #fce4ec 100%);
+      }
+
+      /* ========== 卡片容器：毛玻璃效果 ========== */
+      .login-card {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 20px;
+        padding: 48px 40px;
+        width: 100%;
+        max-width: 420px;
+        box-shadow: 0 8px 32px rgba(100, 120, 180, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+        transition: max-width 0.3s ease;
+      }
+
+      /* 第二步展开时卡片加宽 */
+      .login-card.wide {
+        max-width: 600px;
+      }
+
+      /* ========== 标题区域 ========== */
+      .login-header {
+        text-align: center;
+        margin-bottom: 36px;
+      }
+      .login-header h1 {
+        font-size: 26px;
+        font-weight: 600;
+        color: #1a1a2e;
+        letter-spacing: 0.5px;
+      }
+      .login-header p {
+        font-size: 14px;
+        color: #7c8db5;
+        margin-top: 8px;
+      }
+
+      /* ========== 表单项 ========== */
+      .form-group {
+        margin-bottom: 20px;
+      }
+      .form-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: #4a5568;
+        margin-bottom: 8px;
+      }
+      .form-group input {
+        width: 100%;
+        padding: 14px 16px;
+        font-size: 15px;
+        color: #1a1a2e;
+        background: #f7f9fc;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 12px;
+        outline: none;
+        transition: all 0.25s ease;
+      }
+      .form-group input::placeholder {
+        color: #a0aec0;
+      }
+      .form-group input:focus {
+        border-color: #6c8cff;
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.12);
+      }
+
+      /* ========== 行内表单（两列布局） ========== */
+      .form-row {
+        display: flex;
+        gap: 12px;
+      }
+      .form-row .form-group {
+        flex: 1;
+      }
+
+      /* ========== 主按钮 ========== */
+      .login-btn {
+        width: 100%;
+        padding: 14px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #fff;
+        background: linear-gradient(135deg, #6c8cff 0%, #a78bfa 100%);
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 8px;
+      }
+      .login-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(108, 140, 255, 0.35);
+      }
+      .login-btn:active {
+        transform: translateY(0);
+      }
+      .login-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      /* ========== 验证码容器 ========== */
+      .captcha-box {
+        margin-top: 24px;
+      }
+
+      /* ========== 短信验证码区域（默认隐藏） ========== */
+      .sms-captcha {
+        margin-top: 24px;
+        display: none;
+      }
+      .sms-captcha .form-group {
+        margin-bottom: 16px;
+      }
+      .sms-captcha .verify-btn {
+        width: 100%;
+        padding: 14px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #fff;
+        background: linear-gradient(135deg, #6c8cff 0%, #a78bfa 100%);
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 8px;
+      }
+      .sms-captcha .verify-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(108, 140, 255, 0.35);
+      }
+
+      /* ========== 结果提示 ========== */
+      .result {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 8px;
+        text-align: center;
+        font-size: 13px;
+        display: none;
+      }
+      .result.ok {
+        background: #f6ffed;
+        color: #52c41a;
+        border: 1px solid #b7eb8f;
+      }
+      .result.err {
+        background: #fff2f0;
+        color: #ff4d4f;
+        border: 1px solid #ffccc7;
+      }
+
+      /* ========== 验证信息面板 ========== */
+      .verify-info {
+        margin-top: 12px;
+        padding: 12px;
+        background: #f5f5f5;
+        border-radius: 8px;
+        font-size: 12px;
+        color: #666;
+        display: none;
+      }
+      .verify-info .vi-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 2px 0;
+      }
+      .verify-info .vi-label {
+        color: #999;
+        flex-shrink: 0;
+      }
+      .verify-info .vi-value {
+        color: #333;
+        font-family: monospace;
+        text-align: right;
+        max-width: 72%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* ========== 返回链接 ========== */
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 20px;
+        font-size: 14px;
+        color: #7c8db5;
+        text-decoration: none;
+        transition: color 0.25s ease;
+      }
+      .back-link:hover {
+        color: #6c8cff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="login-card">
+      <!-- 页面标题 -->
+      <div class="login-header">
+        <h1>验证码验证</h1>
+        <p>腾讯验证码 / 手机短信验证</p>
+      </div>
+
+      <!-- ========== 第一步：输入 eventid / ssaCode ========== -->
+      <div id="step1">
+        <div class="form-group">
+          <label>eventid / ssaCode</label>
+          <label for="eventidInput"></label><input type="text" id="eventidInput" placeholder="请输入 eventid / ssaCode" autocomplete="off" />
+        </div>
+        <button class="login-btn" id="getInfoBtn">获取验证信息</button>
+        <div class="result" id="step1Result" style="display: none; margin-top: 12px"></div>
+      </div>
+
+      <!-- ========== 第二步：显示验证信息 + 设备参数，手动触发验证码 ========== -->
+      <div id="step2" style="display: none">
+        <!-- 验证信息面板（sessionid、v_type、txappid 等） -->
+        <div class="verify-info" id="verifyInfo"></div>
+
+        <!-- 设备参数：mid、userid、dfid、webgl（从 cookie 预填，可手动修改） -->
+        <div class="form-row">
+          <div class="form-group">
+            <label>mid</label>
+            <label for="midInput"></label><input type="text" id="midInput" />
+          </div>
+          <div class="form-group">
+            <label>userid</label>
+            <label for="useridInput"></label><input type="text" id="useridInput" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>dfid</label>
+            <label for="dfidInput"></label><input type="text" id="dfidInput" />
+          </div>
+          <div class="form-group">
+            <label>webgl</label>
+            <label for="webglInput"></label><input type="text" id="webglInput" />
+          </div>
+        </div>
+
+        <!-- 触发验证码按钮 -->
+        <button class="login-btn" id="triggerCaptchaBtn"></button>
+
+        <!-- 腾讯验证码挂载容器 -->
+        <div class="captcha-box" id="captchaBox"></div>
+
+        <!-- 短信验证码输入区域 -->
+        <div class="sms-captcha" id="smsCaptcha">
+          <div class="form-group">
+            <label>验证码</label>
+            <label for="smsCode"></label><input type="text" id="smsCode" placeholder="请输入验证码" maxlength="6" />
+          </div>
+          <button class="verify-btn" id="smsVerifyBtn">验证</button>
+        </div>
+
+        <!-- 验证结果提示 -->
+        <div class="result" id="result"></div>
+      </div>
+
+      <a class="back-link" href="./index.html">← 返回首页</a>
+    </div>
+
+    <!-- 引入行为指纹生成工具 -->
+    <script src="./fingerprint.js"></script>
+    <script>
+      /**
+       * ============================================================
+       * 验证码验证页面
+       * ============================================================
+       *
+       * 两步流程：
+       * 1. 输入 eventid/ssaCode → 调用 /get/verify/info 获取验证信息
+       * 2. 显示设备参数（mid/userid/dfid/webgl，从 cookie 预填）→ 手动触发验证码
+       *
+       * 支持的验证类型：
+       * - v_type=23：腾讯图形验证码
+       * - v_type=32：手机短信验证码
+       */
+
+      // ========== 从 fingerprint.js 解构工具函数 ==========
+      const { generateWebGLHash, generateEDTData, encryptSid, hexToBase64, ri } = fingerprint;
+
+      // ========== DOM 元素引用 ==========
+      const eventidInput = document.getElementById('eventidInput'); // eventid 输入框
+      const getInfoBtn = document.getElementById('getInfoBtn'); // 获取验证信息按钮
+      const step1Result = document.getElementById('step1Result'); // 第一步结果提示
+      const step1 = document.getElementById('step1'); // 第一步容器
+      const step2 = document.getElementById('step2'); // 第二步容器
+      const verifyInfoEl = document.getElementById('verifyInfo'); // 验证信息面板
+      const midInput = document.getElementById('midInput'); // 设备 MID 输入框
+      const useridInput = document.getElementById('useridInput'); // 用户 ID 输入框
+      const dfidInput = document.getElementById('dfidInput'); // 设备指纹 ID 输入框
+      const webglInput = document.getElementById('webglInput'); // WebGL 指纹输入框
+      const triggerCaptchaBtn = document.getElementById('triggerCaptchaBtn'); // 触发验证码按钮
+      const captchaBox = document.getElementById('captchaBox'); // 腾讯验证码容器
+      const smsCaptcha = document.getElementById('smsCaptcha'); // 短信验证码区域
+      const smsCode = document.getElementById('smsCode'); // 短信验证码输入框
+      const smsVerifyBtn = document.getElementById('smsVerifyBtn'); // 短信验证按钮
+      const resultEl = document.getElementById('result'); // 验证结果提示
+
+      // ========== 验证信息缓存 ==========
+      let currentEventid = ''; // 当前 eventid
+      let currentTxappid = ''; // 腾讯验证码应用 ID
+      let currentVtype = 0; // 验证类型（23=腾讯, 32=短信）
+
+      /**
+       * 从 cookie 中读取指定名称的值
+       * @param {string} name - cookie 键名
+       * @returns {string} cookie 值，不存在时返回 '0'
+       */
+      function getCookie(name) {
+        const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+        return match ? decodeURIComponent(match[1]) : '0';
+      }
+
+      /**
+       * 显示第一步的结果提示
+       * @param {boolean} ok - 是否成功
+       * @param {string} text - 提示文本
+       */
+      function showStep1Result(ok, text) {
+        step1Result.style.display = 'block';
+        step1Result.className = 'result ' + (ok ? 'ok' : 'err');
+        step1Result.textContent = text;
+      }
+
+      /**
+       * 显示第二步的验证结果提示
+       * @param {boolean} ok - 是否成功
+       * @param {string} text - 提示文本
+       */
+      function showResult(ok, text) {
+        resultEl.style.display = 'block';
+        resultEl.className = 'result ' + (ok ? 'ok' : 'err');
+        resultEl.textContent = text;
+      }
+
+      /**
+       * 动态加载外部 JS 脚本
+       * @param {string} url - 脚本地址
+       * @param {function} cb - 加载完成/失败的回调函数
+       */
+      function loadScript(url, cb) {
+        const s = document.createElement('script');
+        s.src = url;
+        s.onload = function () {
+          cb();
+        };
+        s.onerror = function () {
+          cb(new Error('load failed'));
+        };
+        document.head.appendChild(s);
+      }
+
+      /**
+       * ============================================================
+       * 第一步：获取验证信息
+       * ============================================================
+       *
+       * 调用 /get/verify/info 接口获取验证详情（sessionid、v_type、txappid 等），
+       * 成功后切换到第二步，显示设备参数输入框。
+       */
+      async function fetchVerifyInfo() {
+        const eventid = eventidInput.value.trim();
+        if (!eventid) {
+          eventidInput.focus();
+          return;
+        }
+
+        // 按钮状态：禁用 + 文案变为"获取中..."
+        getInfoBtn.disabled = true;
+        getInfoBtn.textContent = '获取中...';
+        step1Result.style.display = 'none';
+
+        try {
+          // 调用服务端获取验证信息
+          const data = await fetch(`/get/verify/info?eventid=${encodeURIComponent(eventid)}`).then((r) => r.json());
+          console.log('Verify Info:', data);
+
+          // 接口返回失败
+          if (!data.data) {
+            showStep1Result(false, '获取失败: ' + (data.error_msg || JSON.stringify(data)));
+            getInfoBtn.disabled = false;
+            getInfoBtn.textContent = '获取验证信息';
+            return;
+          }
+
+          const info = data.data;
+
+          // 缓存验证信息
+          currentEventid = eventid;
+          currentTxappid = info.txappid || '';
+          currentVtype = info.v_type || 0;
+
+          // 渲染验证信息面板
+          verifyInfoEl.innerHTML = [
+            { label: 'sessionid', value: info.sessionid },
+            { label: 'v_type', value: info.v_type },
+            { label: 'txappid', value: info.txappid },
+            { label: 'business', value: info.business },
+            { label: 'url', value: info.url },
+          ]
+            .map(
+              (item) =>
+                `<div class="vi-row">` +
+                `<span class="vi-label">${item.label}</span>` +
+                `<span class="vi-value" title="${item.value || ''}">${item.value || '-'}</span>` +
+                `</div>`
+            )
+            .join('');
+          verifyInfoEl.style.display = 'block';
+
+          // 从 cookie 预填设备参数，读不到则默认 '0'
+          midInput.value = getCookie('KUGOU_API_MID') || '0';
+          useridInput.value = getCookie('userid') || '0';
+          dfidInput.value = getCookie('dfid') || '0';
+
+          // WebGL 指纹：优先读 cookie，读不到则调用 generateWebGLHash 生成
+          const webglCookie = getCookie('KUGOU_API_WEBGL');
+          webglInput.value = webglCookie && webglCookie !== '0' ? webglCookie : generateWebGLHash();
+
+          // 根据验证类型设置按钮文案
+          if (currentVtype === 23) {
+            triggerCaptchaBtn.textContent = '打开腾讯验证码';
+          } else if (currentVtype === 32) {
+            triggerCaptchaBtn.textContent = '发送短信验证码';
+          } else {
+            triggerCaptchaBtn.textContent = '未知验证类型: ' + currentVtype;
+            triggerCaptchaBtn.disabled = true;
+          }
+
+          // 切换到第二步，卡片加宽
+          step1.style.display = 'none';
+          step2.style.display = 'block';
+          document.querySelector('.login-card').classList.add('wide');
+        } catch (e) {
+          console.error('fetchVerifyInfo error:', e);
+          showStep1Result(false, '请求失败: ' + e.message);
+          getInfoBtn.disabled = false;
+          getInfoBtn.textContent = '获取验证信息';
+        }
+      }
+
+      /**
+       * ============================================================
+       * 生成 SID/EDT 加密数据
+       * ============================================================
+       *
+       * 从输入框读取设备参数，生成模拟行为指纹数据并加密：
+       * - SID：RSA-OAEP 加密的 AES 密钥（Base64）
+       * - EDT：AES-128-CBC 加密的行为数据（Base64）
+       *
+       * @returns {Promise<{sid: string, edt: string}>}
+       */
+      async function generateSidEdt() {
+        const mid = midInput.value.trim() || '0';
+        const userid = useridInput.value.trim() || '0';
+        const dfid = dfidInput.value.trim() || '0';
+        const webglHash = webglInput.value.trim() || generateWebGLHash();
+
+        // 随机化鼠标轨迹参数
+        const points = ri(30, 60); // 采样点数
+        const startX = ri(200, 600); // 起点 X
+        const startY = ri(200, 500); // 起点 Y
+        const endX = ri(500, 700); // 终点 X
+        const endY = ri(80, 150); // 终点 Y
+
+        const ts = Date.now();
+
+        // 生成模拟行为数据（鼠标轨迹 + 滚动 + 窗口事件）
+        const data = generateEDTData({ startX, startY, endX, endY, mousePoints: points });
+
+        // 拼接明文: mid=xxx;userid=xxx;dfid=xxx;webgl=xxx;webdriver=0;ts=xxx;data=xxx
+        const sidPlaintext = `mid=${mid};userid=${userid};dfid=${dfid};webgl=${webglHash};webdriver=0;ts=${ts};data=${data}`;
+
+        // AES 加密明文得到 EDT，RSA 加密 AES 密钥得到 SID
+        const result = await encryptSid(sidPlaintext);
+        return {
+          sid: hexToBase64(result.rsaCiphertextHex),
+          edt: hexToBase64(result.aesCiphertextHex),
+        };
+      }
+
+      /**
+       * ============================================================
+       * 触发验证码（根据 v_type 分发）
+       * ============================================================
+       */
+      async function triggerCaptcha() {
+        triggerCaptchaBtn.disabled = true;
+        resultEl.style.display = 'none';
+
+        // 生成 sid/edt
+        const { sid, edt } = await generateSidEdt();
+        console.log({ sid, edt });
+
+        // 根据验证类型分发
+        if (currentVtype === 23) {
+          startTxCaptcha(currentEventid, currentTxappid, sid, edt);
+        } else if (currentVtype === 32) {
+          startSmsCaptcha(currentEventid, currentVtype, sid, edt);
+        }
+      }
+
+      /**
+       * ============================================================
+       * 腾讯图形验证码流程（v_type=23）
+       * ============================================================
+       *
+       * 1. 动态加载 TCaptcha.js SDK
+       * 2. 创建 TencentCaptcha 实例并弹出
+       * 3. 用户验证通过后，将 ticket/randstr 拼成 verifycode 提交到服务端
+       *
+       * @param {string} eventid - 验证事件 ID
+       * @param {string} txappid - 腾讯验证码应用 ID
+       * @param {string} sid - RSA 加密的 AES 密钥
+       * @param {string} edt - AES 加密的行为数据
+       */
+      function startTxCaptcha(eventid, txappid, sid, edt) {
+        captchaBox.style.display = 'block';
+        smsCaptcha.style.display = 'none';
+
+        loadScript('https://turing.captcha.qcloud.com/TCaptcha.js', function () {
+          if (typeof TencentCaptcha === 'undefined') {
+            showResult(false, 'TCaptcha.js 加载失败');
+            triggerCaptchaBtn.disabled = false;
+            return;
+          }
+
+          // 创建腾讯验证码实例
+          const captcha = new TencentCaptcha(
+            txappid,
+            function (res) {
+              console.log('Captcha response:', res);
+              if (res.ret === 0) {
+                // 验证通过：拼装 verifycode（格式：KGCodeTX|{ticket,randstr,txappid}）
+                const verifycode =
+                  'KGCodeTX|' +
+                  JSON.stringify({
+                    ticket: res.ticket,
+                    randstr: res.randstr,
+                    txappid: txappid,
+                  });
+
+                // 提交到服务端校验
+                fetch(
+                  `/verify/user/info?eventid=${eventid}&v_type=23` +
+                    `&verifycode=${encodeURIComponent(verifycode)}` +
+                    `&sid=${encodeURIComponent(sid)}&edt=${encodeURIComponent(edt)}`,
+                  { method: 'GET' }
+                )
+                  .then((r) => r.json())
+                  .then((data) => {
+                    console.log('Verification Result:', data);
+                    showResult(true, '验证成功!');
+                    triggerCaptchaBtn.style.display = 'none';
+                  })
+                  .catch((err) => {
+                    console.error('Verification request failed:', err);
+                    showResult(false, '验证码验证请求失败');
+                    triggerCaptchaBtn.disabled = false;
+                  });
+              } else {
+                // 用户关闭验证码或验证失败
+                showResult(false, '用户取消 (ret=' + res.ret + ')');
+                triggerCaptchaBtn.disabled = false;
+              }
+            },
+            { type: '', showHeader: false, ready: function () {} }
+          );
+          captcha.show();
+        });
+      }
+
+      /**
+       * ============================================================
+       * 手机短信验证码流程（v_type=32）
+       * ============================================================
+       *
+       * 1. 显示短信验证码输入框
+       * 2. 用户输入验证码后提交到服务端校验
+       *
+       * @param {string} eventid - 验证事件 ID
+       * @param {number} v_type - 验证类型
+       * @param {string} sid - RSA 加密的 AES 密钥
+       * @param {string} edt - AES 加密的行为数据
+       */
+      function startSmsCaptcha(eventid, v_type, sid, edt) {
+        captchaBox.style.display = 'none';
+        smsCaptcha.style.display = 'block';
+        smsCode.value = '';
+        smsCode.focus();
+
+        // 绑定验证按钮点击事件
+        smsVerifyBtn.onclick = async function () {
+          const code = smsCode.value.trim();
+          if (!code) {
+            alert('请输入验证码');
+            return;
+          }
+
+          try {
+            // 提交短信验证码到服务端
+            const verifyResponse = await fetch(
+              `/verify/user/info?eventid=${eventid}&v_type=${v_type}` +
+                `&verifycode=${encodeURIComponent(code)}` +
+                `&sid=${encodeURIComponent(sid)}&edt=${encodeURIComponent(edt)}`,
+              { method: 'GET' }
+            );
+            const verifyData = await verifyResponse.json();
+            console.log('SMS Verification Result:', verifyData);
+            showResult(true, '验证成功!');
+          } catch (err) {
+            console.error('SMS Verification request failed:', err);
+            showResult(false, '验证码验证请求失败');
+          }
+        };
+      }
+
+      // ========== 事件绑定 ==========
+
+      // 获取验证信息按钮
+      getInfoBtn.addEventListener('click', fetchVerifyInfo);
+
+      // eventid 输入框回车触发
+      eventidInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') fetchVerifyInfo();
+      });
+
+      // 触发验证码按钮
+      triggerCaptchaBtn.addEventListener('click', triggerCaptcha);
+
+      // ========== 页面初始化：从 URL 参数读取 eventid ==========
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const eventid = params.get('eventid') || params.get('ssaCode') || '';
+
+        if (eventid) {
+          // URL 带有 eventid，自动填入并获取验证信息
+          eventidInput.value = eventid;
+          fetchVerifyInfo();
+        } else {
+          // 无 eventid，聚焦输入框等待用户输入
+          eventidInput.focus();
+        }
+      })();
+    </script>
+  </body>
+</html>

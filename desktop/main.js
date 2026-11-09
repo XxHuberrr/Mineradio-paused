@@ -25,6 +25,9 @@ const {
 const { extractKugouAuth } = require('../kugou-api');
 const { qishuiCookieHasLogin } = require('../qishui-api');
 const { clearSpotifyToken } = require('../spotify-api');
+// 酷狗概念版（lite）内嵌调用层：扫码登录等直接进程内调用 kugou-server 模块，
+// 不再 spawn KuGouMusicApi 的 HTTP 子进程（原实现依赖硬编码 /usr/bin/node，Windows 上无法工作）
+const kugouLiteApi = require('../kugou-lite');
 
 registerWallpaperEngineScheme(protocol);
 registerLocalMusicScheme(protocol);
@@ -481,7 +484,7 @@ const CHROMIUM_SAFE_PERFORMANCE_SWITCHES = [
   ['enable-oop-rasterization'],
   ['enable-zero-copy'],
   ['enable-accelerated-2d-canvas'],
-  ['use-angle', 'd3d11'],
+  ['use-angle', 'gl'],
 ];
 const CHROMIUM_OPT_IN_PERFORMANCE_SWITCHES = [
   ['ignore-gpu-blocklist', null, 'MINERADIO_IGNORE_GPU_BLOCKLIST'],
@@ -1934,7 +1937,7 @@ async function getGpuDiagnostics() {
       ignoreGpuBlocklist: process.env.MINERADIO_IGNORE_GPU_BLOCKLIST === '1',
       forceHighPerformanceGpu: process.env.MINERADIO_FORCE_HIGH_PERFORMANCE_GPU === '1',
       keepBackgroundRendering: process.env.MINERADIO_KEEP_BACKGROUND_RENDERING === '1',
-      angle: 'd3d11',
+      angle: 'gl',
     },
   };
 }
@@ -1989,7 +1992,7 @@ async function trimAppMemoryNow(reason) {
 }
 
 function scheduleAppMemoryTrim(reason, delay = 9000) {
-  if (process.platform !== 'win32') return;
+  if (process.platform !== 'win32' && process.platform !== 'linux') return;
   if (memoryAutoState.appTrimEnabled === false || memoryAutoState.backgroundTrimEnabled === false) return;
   if (Date.now() - lastAppMemoryTrimAt < 120000) return;
   if (appMemoryTrimTimer) clearTimeout(appMemoryTrimTimer);
@@ -4141,6 +4144,55 @@ ipcMain.handle('mineradio-cache-get-settings', async () => {
   }
 });
 
+const LOCAL_LYRIC_AUDIO_EXT_RE = /\.(mp3|flac|wav|ogg|m4a|aac|opus|wma|ape|aiff?)$/i;
+async function readLocalLyricFromFile(filePath) {
+  const target = String(filePath || '').trim();
+  if (!target) return { ok: false, error: 'EMPTY_PATH', lyric: '' };
+  try {
+    // 1) 同目录同名 .lrc 优先
+    if (fs.existsSync(target) && fs.statSync(target).isFile()) {
+      const lrcCandidate = target.replace(LOCAL_LYRIC_AUDIO_EXT_RE, '.lrc');
+      if (lrcCandidate !== target && fs.existsSync(lrcCandidate) && fs.statSync(lrcCandidate).isFile()) {
+        const text = fs.readFileSync(lrcCandidate, 'utf8').replace(/^\uFEFF/, '');
+        if (text && text.trim()) return { ok: true, source: 'lrc', lyric: text };
+      }
+      if (LOCAL_LYRIC_AUDIO_EXT_RE.test(target)) {
+        try {
+          const mm = await import('music-metadata');
+          const meta = await mm.parseFile(target, { duration: false, skipCovers: true });
+          const lyrics = (meta && meta.common && meta.common.lyrics) || [];
+          for (const entry of lyrics) {
+            if (entry && typeof entry.text === 'string' && entry.text.trim()) {
+              return { ok: true, source: 'embedded', lyric: entry.text.replace(/^\uFEFF/, '') };
+            }
+          }
+          if (lyrics.length) {
+            const syncChunks = lyrics
+              .map((entry) => {
+                const arr = (entry && Array.isArray(entry.syncText)) ? entry.syncText : [];
+                return arr.map((t) => (t && t.text ? t.text : '')).filter(Boolean).join('\n');
+              })
+              .filter(Boolean);
+            if (syncChunks.length) return { ok: true, source: 'embedded-sync', lyric: syncChunks.join('\n\n') };
+          }
+        } catch (mmErr) {
+          console.warn('[LocalLyric] music-metadata failed:', mmErr.message);
+        }
+      }
+    }
+    return { ok: false, error: 'NO_LYRIC', lyric: '' };
+  } catch (error) {
+    return { ok: false, error: error.message || 'LOCAL_LYRIC_READ_FAILED', lyric: '' };
+  }
+}
+ipcMain.handle('mineradio-read-local-lyric', async (_event, filePath) => {
+  try {
+    return await readLocalLyricFromFile(filePath);
+  } catch (error) {
+    return { ok: false, error: error.message || 'LOCAL_LYRIC_READ_FAILED', lyric: '' };
+  }
+});
+
 ipcMain.handle('mineradio-cache-choose-directory', async () => {
   const result = await dialog.showOpenDialog({
     title: '选择 Mineradio 缓存目录',
@@ -4858,6 +4910,74 @@ ipcMain.handle('kugou-music-open-login', async (event, options) => {
 
 ipcMain.handle('kugou-music-clear-login', async () => {
   return clearKugouMusicLoginSession();
+});
+
+// ── 酷狗概念版 QR 码登录（进程内调用 kugou-server 模块，无子进程/端口依赖）──
+ipcMain.handle('kugou-music-qr-create', async () => {
+  if (!loginEasterEggGate.isUnlocked()) return loginEasterEggLockedResult();
+  try {
+    const keyData = await kugouLiteApi.liteQrKey();
+    const key = keyData.qrcode || keyData.key;
+    if (!key) throw new Error('no qrcode key');
+
+    // 优先使用官方 /v2/qrcode 返回的标准二维码（App 能识别关联 key）；
+    // 没有时再退回 /login/qr/create 自拼 URL 二维码
+    const officialImg = keyData.qrcode_img || keyData.qr_img || '';
+    if (officialImg) {
+      return {
+        ok: true,
+        key,
+        qrImgUrl: officialImg,
+        qrUrl: keyData.url || '',
+        source: 'official',
+      };
+    }
+
+    const qrData = await kugouLiteApi.liteQrCreate(key);
+    return {
+      ok: true,
+      key,
+      qrUrl: qrData.url || '',
+      qrImgUrl: qrData.qrcode_img || qrData.base64 || '',
+      source: 'create',
+    };
+  } catch (e) {
+    return { ok: false, error: e.message || 'QR_CREATE_FAILED' };
+  }
+});
+
+ipcMain.handle('kugou-music-qr-check', async (_event, key) => {
+  if (!loginEasterEggGate.isUnlocked()) return loginEasterEggLockedResult();
+  try {
+    const data = await kugouLiteApi.liteQrCheck(key);
+    if (String(data.status) === '4') {
+      const token = String(data.token || '');
+      const userid = String(data.userid || '');
+      // 保存概念版登录态到 kugouCookie（供 server.js 登录状态/搜索/歌词/播放使用）
+      try {
+        const cookieText = ['token=' + token, 'userid=' + userid].filter(Boolean).join('; ');
+        if (cookieText && localServer && typeof localServer.saveKugouCookie === 'function') {
+          localServer.saveKugouCookie(cookieText);
+          console.log('[KugouQR] lite session saved, userid=' + userid);
+        } else {
+          console.warn('[KugouQR] localServer not ready, session not persisted');
+        }
+      } catch (saveErr) {
+        console.warn('[KugouQR] save cookie failed:', saveErr.message);
+      }
+      return {
+        ok: true, status: 'confirmed',
+        token,
+        userid,
+        nickname: data.nickname || data.user_name || '',
+      };
+    }
+    if (String(data.status) === '2') return { ok: true, status: 'scanned' };
+    if (String(data.status) === '0') return { ok: true, status: 'expired' };
+    return { ok: true, status: 'waiting' };
+  } catch (e) {
+    return { ok: false, error: e.message || 'QR_CHECK_FAILED' };
+  }
 });
 
 ipcMain.handle('qishui-music-clear-login', async () => {

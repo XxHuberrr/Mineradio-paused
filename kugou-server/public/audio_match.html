@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>听歌识曲</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #e0ecff 0%, #f5f0ff 50%, #fce4ec 100%);
+      }
+
+      .card {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 20px;
+        padding: 48px 40px;
+        width: 100%;
+        max-width: 420px;
+        box-shadow: 0 8px 32px rgba(100, 120, 180, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+      }
+
+      .card-header {
+        text-align: center;
+        margin-bottom: 36px;
+      }
+
+      .card-header h1 {
+        font-size: 26px;
+        font-weight: 600;
+        color: #1a1a2e;
+        letter-spacing: 0.5px;
+      }
+
+      .card-header p {
+        font-size: 14px;
+        color: #7c8db5;
+        margin-top: 8px;
+      }
+
+      .record-btn {
+        width: 100%;
+        padding: 14px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #fff;
+        background: linear-gradient(135deg, #6c8cff 0%, #a78bfa 100%);
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        letter-spacing: 0.5px;
+      }
+
+      .record-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(108, 140, 255, 0.35);
+      }
+
+      .record-btn:active {
+        transform: translateY(0);
+      }
+
+      .record-btn.recording {
+        background: linear-gradient(135deg, #f87171 0%, #fb923c 100%);
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+
+      .record-btn.system {
+        background: linear-gradient(135deg, #34d399 0%, #6c8cff 100%);
+        margin-top: 12px;
+      }
+
+      .record-btn.system.recording {
+        background: linear-gradient(135deg, #f87171 0%, #fb923c 100%);
+      }
+
+      @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.4); }
+        50% { box-shadow: 0 0 0 10px rgba(248, 113, 113, 0); }
+      }
+
+      .status {
+        text-align: center;
+        margin-top: 20px;
+        font-size: 14px;
+        color: #7c8db5;
+        min-height: 22px;
+      }
+
+      .player-wrap {
+        margin-top: 20px;
+        display: none;
+      }
+
+      .player-wrap audio {
+        width: 100%;
+        border-radius: 8px;
+      }
+
+      .result-section {
+        margin-top: 24px;
+        display: none;
+      }
+
+      .result-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: #4a5568;
+        margin-bottom: 12px;
+      }
+
+      .result-card {
+        background: #f7f9fc;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 16px;
+      }
+
+      .result-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #edf2f7;
+      }
+
+      .result-item:last-child {
+        border-bottom: none;
+      }
+
+      .result-song {
+        font-size: 15px;
+        font-weight: 500;
+        color: #1a1a2e;
+      }
+
+      .result-artist {
+        font-size: 13px;
+        color: #7c8db5;
+        margin-top: 2px;
+      }
+
+      .result-score {
+        font-size: 13px;
+        font-weight: 600;
+        color: #6c8cff;
+        white-space: nowrap;
+        margin-left: 12px;
+      }
+
+      .no-result {
+        text-align: center;
+        color: #a0aec0;
+        font-size: 14px;
+        padding: 12px 0;
+      }
+
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 24px;
+        font-size: 14px;
+        color: #7c8db5;
+        text-decoration: none;
+        transition: color 0.25s ease;
+      }
+
+      .back-link:hover {
+        color: #6c8cff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="card-header">
+        <h1>听歌识曲</h1>
+        <p>录制环境音频，识别歌曲信息</p>
+      </div>
+
+      <button class="record-btn" id="start">麦克风录制</button>
+      <button class="record-btn system" id="startSystem">系统内录</button>
+
+      <div class="status" id="status"></div>
+
+      <div class="player-wrap" id="playerWrap">
+        <audio id="player" controls></audio>
+      </div>
+
+      <div class="result-section" id="resultSection">
+        <div class="result-title">识别结果</div>
+        <div class="result-card" id="resultCard"></div>
+      </div>
+
+      <a class="back-link" href="./index.html">← 返回首页</a>
+    </div>
+
+    <script>
+      const startBtn = document.getElementById('start');
+      const startSystemBtn = document.getElementById('startSystem');
+      const statusEl = document.getElementById('status');
+      const playerWrap = document.getElementById('playerWrap');
+      const player = document.getElementById('player');
+      const resultSection = document.getElementById('resultSection');
+      const resultCard = document.getElementById('resultCard');
+
+      const SAMPLE_RATE = 8000;
+      const MAX_SECONDS = 10;
+      const CHANNELS = 1;
+      let audioChunks = [];
+      let mediaRecorder;
+      let activeStream;
+      let recordingSeconds = 0;
+      let recordingTimer;
+
+      const audioBufferToPCM = (audioBuffer) => {
+        const float32 = audioBuffer.getChannelData(0);
+        const int16 = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        return int16.buffer;
+      };
+
+      const decodeAudioBlob = async (blob) => {
+        const offlineCtx = new OfflineAudioContext(CHANNELS, SAMPLE_RATE * MAX_SECONDS, SAMPLE_RATE);
+        const arrayBuffer = await blob.arrayBuffer();
+        return await offlineCtx.decodeAudioData(arrayBuffer);
+      };
+
+      const getSystemAudioStream = async () => {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        if (!stream || stream.getAudioTracks().length === 0) throw new Error('未获取到音频轨道');
+        return stream;
+      };
+
+      const getDisplayMediaStream = async () => {
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+        const audioTracks = displayStream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          displayStream.getTracks().forEach((t) => t.stop());
+          throw new Error('未获取到系统音频，请勾选"分享系统音频"');
+        }
+        displayStream.getVideoTracks().forEach((t) => t.stop());
+        return new MediaStream(audioTracks);
+      };
+
+      const recognizeAudio = (stream, btn) => {
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+
+        mediaRecorder.addEventListener('dataavailable', (e) => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        });
+
+        mediaRecorder.addEventListener('stop', async (e) => {
+          if (audioChunks.length === 0) {
+            statusEl.textContent = '未录制到音频';
+            resetBtn();
+            setButtonsDisabled(false);
+            return;
+          }
+
+          statusEl.textContent = '正在识别...';
+
+          try {
+            const blob = new Blob(audioChunks, { type: 'audio/webm' });
+
+            playerWrap.style.display = 'block';
+            player.src = URL.createObjectURL(blob);
+
+            const audioBuffer = await decodeAudioBlob(blob);
+            const pcmData = audioBufferToPCM(audioBuffer);
+
+            const res = await fetch(`/audio/match?t=${Date.now()}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/octet-stream' },
+              body: pcmData,
+            });
+            const json = await res.json();
+
+            renderResult(json);
+            statusEl.textContent = '识别完成';
+          } catch (e) {
+            console.error('recognizeAudio', e);
+            statusEl.textContent = '识别失败，请重试';
+          }
+
+          resetBtn();
+          setButtonsDisabled(false);
+        });
+
+        mediaRecorder.start(500);
+        recordingTimer = setInterval(() => {
+          recordingSeconds += 1;
+          const left = MAX_SECONDS - recordingSeconds;
+          statusEl.textContent = left > 0 ? `录制中... ${left}s` : '正在处理...';
+          if (recordingSeconds >= MAX_SECONDS) stopRecording();
+        }, 1000);
+      };
+
+      function stopRecording() {
+        if (recordingTimer) {
+          clearInterval(recordingTimer);
+          recordingTimer = null;
+        }
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        if (activeStream) {
+          activeStream.getTracks().forEach((t) => t.stop());
+          activeStream = null;
+        }
+      }
+
+      function cleanup() {
+        stopRecording();
+        if (player.src) {
+          URL.revokeObjectURL(player.src);
+          player.src = '';
+        }
+      }
+
+      function resetBtn() {
+        startBtn.textContent = '麦克风录制';
+        startBtn.classList.remove('recording');
+        startSystemBtn.textContent = '系统内录';
+        startSystemBtn.classList.remove('recording');
+      }
+
+      function renderResult(json) {
+        resultSection.style.display = 'block';
+
+        if (json.status !== 1 || !Array.isArray(json.data) || json.data.length === 0) {
+          resultCard.innerHTML = '<div class="no-result">未识别到歌曲</div>';
+          return;
+        }
+
+        const songs = json.data;
+        const timeStr = json.server_time ? ` · ${json.server_time}ms` : '';
+
+        resultCard.innerHTML =
+          `<div style="font-size:12px;color:#a0aec0;margin-bottom:12px;">找到 ${songs.length} 个结果${timeStr}</div>` +
+          songs
+            .map((item) => {
+              const name = item.songname || '未知';
+              const suffix = item.songNameSuffix ? ` (${item.songNameSuffix})` : '';
+              const artist = item.singername || '未知歌手';
+              const album = item.album?.[0]?.albumname || '';
+              const dist = item.dist ? `${(parseFloat(item.dist) * 100).toFixed(0)}%` : '';
+              const cover = item.union_cover?.replace('{size}', '100') || '';
+              const duration = item.timelength_128 ? formatDuration(item.timelength_128) : '';
+
+              return `
+                <div class="result-item">
+                  ${cover ? `<img src="${cover}" style="width:48px;height:48px;border-radius:8px;object-fit:cover;margin-right:12px;" />` : ''}
+                  <div style="flex:1;min-width:0;">
+                    <div class="result-song">${name}${suffix}</div>
+                    <div class="result-artist">${artist}${album ? ` · ${album}` : ''}</div>
+                  </div>
+                  <div style="text-align:right;margin-left:12px;">
+                    ${dist ? `<div class="result-score">${dist}</div>` : ''}
+                    ${duration ? `<div style="font-size:12px;color:#a0aec0;margin-top:2px;">${duration}</div>` : ''}
+                  </div>
+                </div>
+              `;
+            })
+            .join('');
+      }
+
+      function formatDuration(ms) {
+        const s = Math.floor(ms / 1000);
+        const m = Math.floor(s / 60);
+        const sec = s % 60;
+        return `${m}:${String(sec).padStart(2, '0')}`;
+      }
+
+      function setButtonsDisabled(disabled) {
+        if (!startBtn.classList.contains('recording')) startBtn.disabled = disabled;
+        if (!startSystemBtn.classList.contains('recording')) startSystemBtn.disabled = disabled;
+      }
+
+      async function startRecordWith(getStream, btn) {
+        if (btn.classList.contains('recording')) {
+          btn.textContent = '处理中...';
+          btn.disabled = true;
+          stopRecording();
+          return;
+        }
+
+        cleanup();
+        audioChunks = [];
+        recordingSeconds = 0;
+        playerWrap.style.display = 'none';
+        resultSection.style.display = 'none';
+        statusEl.textContent = '准备录制...';
+        btn.textContent = '停止录制';
+        btn.classList.add('recording');
+        setButtonsDisabled(true);
+
+        try {
+          const stream = await getStream();
+          activeStream = stream;
+          recognizeAudio(stream, btn);
+        } catch (e) {
+          console.error(e);
+          statusEl.textContent = e.message || '获取音频失败';
+          resetBtn();
+          setButtonsDisabled(false);
+        }
+      }
+
+      startBtn.addEventListener('click', () => startRecordWith(getSystemAudioStream, startBtn));
+      startSystemBtn.addEventListener('click', () => startRecordWith(getDisplayMediaStream, startSystemBtn));
+    </script>
+  </body>
+</html>

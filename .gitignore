@@ -12,6 +12,7 @@ win-unpacked/
 *.msi
 *.blockmap
 *.zip
+*.tar.gz
 *.7z
 *.asar
 
@@ -67,3 +68,7 @@ tmp/
 *.png.tmp
 verification/
 screenshots/
+
+# ===== 根目录打包产物 =====
+*.deb
+Mineradio-2.0.3.zip

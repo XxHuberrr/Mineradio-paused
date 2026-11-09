@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>酷狗音乐 API</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #e0ecff 0%, #f5f0ff 50%, #fce4ec 100%);
+        color: #1a1a2e;
+      }
+
+      .container {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 20px;
+        padding: 48px 40px;
+        width: 100%;
+        max-width: 480px;
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(100, 120, 180, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+      }
+
+      .logo {
+        font-size: 42px;
+        margin-bottom: 8px;
+      }
+
+      h1 {
+        font-size: 28px;
+        font-weight: 600;
+        color: #1a1a2e;
+        margin-bottom: 12px;
+      }
+
+      .description {
+        font-size: 15px;
+        color: #7c8db5;
+        line-height: 1.6;
+        margin-bottom: 28px;
+      }
+
+      .doc-link {
+        display: inline-block;
+        padding: 10px 24px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #fff;
+        background: linear-gradient(135deg, #6c8cff 0%, #a78bfa 100%);
+        border-radius: 10px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        margin-bottom: 32px;
+      }
+
+      .doc-link:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(108, 140, 255, 0.35);
+      }
+
+      h2 {
+        font-size: 17px;
+        font-weight: 600;
+        color: #4a5568;
+        margin-bottom: 16px;
+      }
+
+      .example-list {
+        list-style: none;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 10px;
+      }
+
+      .example-list li {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 15px;
+        color: #4a5568;
+      }
+
+      .example-list a {
+        color: #6c8cff;
+        text-decoration: none;
+        padding: 10px 20px;
+        background: #f7f9fc;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 10px;
+        transition: all 0.25s ease;
+        width: 100%;
+      }
+
+      @media (max-width: 400px) {
+        .example-list { grid-template-columns: 1fr; }
+      }
+
+      .example-list a:hover {
+        border-color: #6c8cff;
+        background: #eef2ff;
+        color: #5a7ae6;
+      }
+
+      .example-list .index {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        background: linear-gradient(135deg, #6c8cff 0%, #a78bfa 100%);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 6px;
+        flex-shrink: 0;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div class="logo">🎵</div>
+      <h1>酷狗音乐 API</h1>
+      <p class="description">当你看到这个页面时，这个服务已经成功跑起来了~</p>
+      <a class="doc-link" href="//kugoumusicapi-docs.4everland.app/">查看文档</a>
+      <h2>例子</h2>
+      <ul class="example-list">
+        <li>
+          <span class="index">1</span>
+          <a href="./search?keywords=海阔天空">搜索</a>
+        </li>
+        <li>
+          <span class="index">2</span>
+          <a href="./top/song">新歌速递</a>
+        </li>
+        <li>
+          <span class="index">3</span>
+          <a href="./everyday/recommend">每日推荐</a>
+        </li>
+        <li>
+          <span class="index">4</span>
+          <a href="./login_captcha.html">登录验证码</a>
+        </li>
+        <li>
+          <span class="index">5</span>
+          <a href="./verifySlide.html">验证码验证</a>
+        </li>
+        <li>
+          <span class="index">6</span>
+          <a href="./audio_match.html">听歌识曲</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

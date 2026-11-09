@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- 移动端视口设置，确保页面在不同设备上正确缩放 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>登录</title>
+    <!-- 引入验证码相关的 WASM/JS 工具包（提供 wasm_bindgen 等全局对象） -->
+    <script src="./verify-pkg/verifycode.js"></script>
+    <style>
+      /* ========== 全局重置样式 ========== */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      /* ========== 页面主体：全屏居中 + 渐变背景 ========== */
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #e0ecff 0%, #f5f0ff 50%, #fce4ec 100%);
+      }
+
+      /* ========== 登录卡片容器：毛玻璃效果 ========== */
+      .login-card {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        border-radius: 20px;
+        padding: 48px 40px;
+        width: 100%;
+        max-width: 400px;
+        box-shadow: 0 8px 32px rgba(100, 120, 180, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+      }
+
+      /* ========== 登录页头部标题区域 ========== */
+      .login-header {
+        text-align: center;
+        margin-bottom: 36px;
+      }
+
+      .login-header h1 {
+        font-size: 26px;
+        font-weight: 600;
+        color: #1a1a2e;
+        letter-spacing: 0.5px;
+      }
+
+      .login-header p {
+        font-size: 14px;
+        color: #7c8db5;
+        margin-top: 8px;
+      }
+
+      /* ========== 表单项通用样式 ========== */
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      .form-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: #4a5568;
+        margin-bottom: 8px;
+      }
+
+      .form-group input {
+        width: 100%;
+        padding: 14px 16px;
+        font-size: 15px;
+        color: #1a1a2e;
+        background: #f7f9fc;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 12px;
+        outline: none;
+        transition: all 0.25s ease;
+      }
+
+      /* 输入框占位符颜色 */
+      .form-group input::placeholder {
+        color: #a0aec0;
+      }
+
+      /* 输入框聚焦状态：蓝色边框 + 发光阴影 */
+      .form-group input:focus {
+        border-color: #6c8cff;
+        background: #fff;
+        box-shadow: 0 0 0 3px rgba(108, 140, 255, 0.12);
+      }
+
+      /* ========== 登录按钮 ========== */
+      .login-btn {
+        width: 100%;
+        padding: 14px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #fff;
+        background: linear-gradient(135deg, #6c8cff 0%, #a78bfa 100%);
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 8px;
+        letter-spacing: 0.5px;
+      }
+
+      /* 按钮悬停：上浮 + 阴影加深 */
+      .login-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(108, 140, 255, 0.35);
+      }
+
+      /* 按钮点击：恢复原位 */
+      .login-btn:active {
+        transform: translateY(0);
+      }
+
+      /* ========== 腾讯验证码容器（默认隐藏，按需显示） ========== */
+      .captcha-box {
+        margin-top: 24px;
+      }
+
+      /* ========== 手机短信验证码区域（默认隐藏） ========== */
+      .sms-captcha {
+        margin-top: 24px;
+        display: none;
+      }
+
+      .sms-captcha .form-group {
+        margin-bottom: 16px;
+      }
+
+      /* 短信验证按钮样式（与登录按钮风格一致） */
+      .sms-captcha .verify-btn {
+        width: 100%;
+        padding: 14px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #fff;
+        background: linear-gradient(135deg, #6c8cff 0%, #a78bfa 100%);
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 8px;
+      }
+
+      .sms-captcha .verify-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(108, 140, 255, 0.35);
+      }
+
+      /* ========== 返回首页链接 ========== */
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 20px;
+        font-size: 14px;
+        color: #7c8db5;
+        text-decoration: none;
+        transition: color 0.25s ease;
+      }
+
+      .back-link:hover {
+        color: #6c8cff;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ========== 登录卡片主容器 ========== -->
+    <div class="login-card">
+      <!-- 页面标题 -->
+      <div class="login-header">
+        <h1>欢迎登录</h1>
+        <p>请输入您的账号信息</p>
+      </div>
+
+      <!-- 用户名输入框 -->
+      <div class="form-group">
+        <label>用户名</label>
+        <input type="text" id="username" placeholder="请输入用户名" />
+      </div>
+
+      <!-- 密码输入框 -->
+      <div class="form-group">
+        <label>密码</label>
+        <input type="password" id="password" placeholder="请输入密码" />
+      </div>
+
+      <!-- 登录按钮 -->
+      <button class="login-btn" id="loginBtn">登 录</button>
+
+      <!-- 腾讯验证码挂载容器（由 JS 动态控制显示/隐藏） -->
+      <div class="captcha-box" id="captchaBox"></div>
+
+      <!-- 手机短信验证码输入区域（由 JS 动态控制显示/隐藏） -->
+      <div class="sms-captcha" id="smsCaptcha">
+        <div class="form-group">
+          <label>验证码</label>
+          <input type="text" id="smsCode" placeholder="请输入验证码" maxlength="6" />
+        </div>
+        <button class="verify-btn" id="smsVerifyBtn">验证</button>
+      </div>
+
+      <!-- 返回首页链接 -->
+      <a class="back-link" href="./index.html">← 返回首页</a>
+    </div>
+
+    <script>
+      /**
+       * ============================================================
+       * 登录页面主逻辑（WASM 版，依赖 verifycode.js）
+       * ============================================================
+       *
+       * 与 login_captcha_simulate.html 的区别：
+       * - 本文件使用 WASM 二进制生成 sid/edt 加密参数
+       * - login_captcha_simulate.html 使用纯 JS 模拟，不依赖 WASM
+       *
+       * 整体流程：
+       * 1. 初始化 WASM 验证码加密模块（加载 verifycode_bg_ios.wasm）
+       * 2. 用户输入账号密码，点击登录 → 调用 /login 接口
+       * 3. 若返回 error_code=20028，表示需要二次安全验证
+       * 4. 调用 /get/verify/info 获取验证详情（验证类型、腾讯验证码 appid 等）
+       * 5. 根据 v_type 判断验证类型：
+       *    - v_type=23：腾讯图形验证码（滑块/点选）
+       *    - v_type=32：手机短信验证码
+       * 6. 验证通过后调用 /verify/user/info 接口完成二次验证
+       */
+      (async () => {
+        // ========== DOM 元素引用 ==========
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('loginBtn');
+        const captchaBox = document.getElementById('captchaBox');       // 腾讯验证码容器
+        const smsCaptcha = document.getElementById('smsCaptcha');       // 短信验证码区域
+        const smsCode = document.getElementById('smsCode');             // 短信验证码输入框
+        const smsVerifyBtn = document.getElementById('smsVerifyBtn');   // 短信验证按钮
+
+        /**
+         * 动态加载外部 JS 脚本
+         * @param {string} url - 脚本地址
+         * @param {function} cb - 加载完成/失败的回调函数
+         */
+        function loadScript(url, cb) {
+          const s = document.createElement('script');
+          s.src = url;
+          s.onload = function () { cb(); };
+          s.onerror = function () { cb(new Error('load failed')); };
+          document.head.appendChild(s);
+        }
+
+        // ========== WASM 初始化 ==========
+        // wasm_bindgen 由 verify-pkg/verifycode.js 提供
+        // 用于生成加密参数 sid 和 edt，作为验证请求的安全令牌
+        if (typeof wasm_bindgen !== 'undefined' && wasm_bindgen.run) {
+          try {
+            await wasm_bindgen('./verify-pkg/verifycode_bg_ios.wasm');
+            wasm_bindgen.run();
+          } catch (e) {
+            console.warn('WASM initialization failed:', e);
+          }
+        }
+
+        // ========== 登录按钮点击事件 ==========
+        loginBtn.addEventListener('click', async () => {
+          const username = usernameInput.value;
+          const password = passwordInput.value;
+
+          // 使用 WASM 模块生成加密的会话标识
+          // sid: RSA-OAEP 加密的 AES 密钥（Session ID）
+          // edt: AES-128-CBC 加密的行为数据（Encrypted Data Token）
+          const eData = new wasm_bindgen.EData();
+
+          let sessionid = '';
+
+          try {
+            // 第一步：调用登录接口
+            const loginResult = await fetch(
+              `/login?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`
+            ).then(response => response.json());
+
+            // status === 1 表示登录成功
+            if (loginResult.status === 1) {
+              alert('登录成功！');
+            } else {
+              // error_code === 20028 表示需要进行二次安全验证
+              // ssaCode 是服务端返回的验证事件 ID
+              if (loginResult.error_code === 20028 && loginResult.ssaCode) {
+                // 第二步：获取验证详情（验证类型、腾讯验证码 appid 等）
+                const verifyInfo = await fetch(
+                  `/get/verify/info?eventid=${loginResult.ssaCode}`
+                ).then(response => response.json());
+
+                // 优先使用服务端返回的 sid/edt，否则由 WASM 本地生成
+                const sid = loginResult?.sid || eData.get_sid();
+                const edt = loginResult?.edt || eData.get_edt();
+
+                console.log('sid:', sid, 'edt:', edt);
+                console.log('Verify Info:', verifyInfo);
+
+                sessionid = verifyInfo.data.sessionid;   // 验证会话 ID
+                const txappid = verifyInfo.data.txappid; // 腾讯验证码应用 ID
+                const business = verifyInfo.data.business; // 业务标识
+                const v_type = verifyInfo.data.v_type;     // 验证类型（23=腾讯验证码, 32=手机验证码）
+
+                if (v_type === 23) {
+                  // ===== 腾讯图形验证码流程（v_type=23） =====
+                  // 显示验证码容器，隐藏短信验证码区域
+                  captchaBox.style.display = 'block';
+                  smsCaptcha.style.display = 'none';
+
+                  // 动态加载腾讯验证码 JS SDK
+                  loadScript('https://turing.captcha.qcloud.com/TCaptcha.js', function () {
+                    if (typeof TencentCaptcha === 'undefined') {
+                      return;
+                    }
+                    const appId = txappid;
+
+                    // 创建腾讯验证码实例
+                    // 回调函数 res 包含验证结果：
+                    //   ret === 0 表示验证通过
+                    //   res.ticket: 验证票据
+                    //   res.randstr: 随机字符串（用于防重放）
+                    const captcha = new TencentCaptcha(
+                      appId,
+                      function (res) {
+                        console.log('Captcha response:', res);
+                        if (res.ret === 0) {
+                          // 验证通过：拼装验证数据并发送到服务端
+                          // 格式：KGCodeTX|{ticket, randstr, txappid} 的 JSON 字符串
+                          // KGCodeTX 是腾讯验证码的标识前缀
+                          const verifycode = 'KGCodeTX|' + JSON.stringify({
+                            ticket: res.ticket,
+                            randstr: res.randstr,
+                            txappid: appId,
+                          });
+
+                          // 第三步：将验证码结果提交到服务端进行校验
+                          fetch(
+                            `/verify/user/info?eventid=${loginResult.ssaCode}&v_type=${v_type}` +
+                            `&verifycode=${encodeURIComponent(verifycode)}` +
+                            `&sid=${encodeURIComponent(sid)}&edt=${encodeURIComponent(edt)}`,
+                            { method: 'GET' }
+                          )
+                            .then(response => response.json())
+                            .then(data => {
+                              console.log('Verification Result:', data);
+                            })
+                            .catch(error => {
+                              console.error('Verification request failed:', error);
+                              alert('验证码验证请求失败');
+                            });
+                        } else {
+                          // 用户关闭了验证码弹窗或验证失败
+                          alert(`用户取消 (ret=${res.ret})`);
+                        }
+                      },
+                      {
+                        type: '',            // 验证码类型（空字符串表示使用后台配置的默认类型）
+                        showHeader: false,   // 不显示验证码弹窗标题栏
+                        ready: function () {}, // 验证码就绪回调（当前无操作）
+                      }
+                    );
+                    console.log('Captcha initialized:', captcha);
+                    captcha.show(); // 弹出验证码窗口
+                  });
+                } else if (v_type === 32) {
+                  // ===== 手机短信验证码流程（v_type=32） =====
+                  // 隐藏腾讯验证码容器，显示短信验证码输入区域
+                  captchaBox.style.display = 'none';
+                  smsCaptcha.style.display = 'block';
+                  smsCode.value = '';
+                  smsCode.focus(); // 自动聚焦到验证码输入框
+
+                  // 绑定短信验证按钮的点击事件
+                  smsVerifyBtn.onclick = async function () {
+                    const code = smsCode.value.trim();
+                    if (!code) {
+                      alert('请输入验证码');
+                      return;
+                    }
+
+                    try {
+                      // 第三步：将手机验证码提交到服务端校验
+                      const verifyResponse = await fetch(
+                        `/verify/user/info?eventid=${loginResult.ssaCode}&v_type=${v_type}` +
+                        `&verifycode=${encodeURIComponent(code)}` +
+                        `&sid=${encodeURIComponent(sid)}&edt=${encodeURIComponent(edt)}`,
+                        { method: 'GET' }
+                      );
+                      const verifyData = await verifyResponse.json();
+                      console.log('SMS Verification Result:', verifyData);
+                      alert('验证成功');
+                    } catch (error) {
+                      console.error('SMS Verification request failed:', error);
+                      alert('验证码验证请求失败');
+                    }
+                  };
+                } else {
+                  // 未知的验证类型
+                  console.warn('未知的验证类型:', v_type);
+                  alert('未知的验证类型');
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Login request failed:', e);
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

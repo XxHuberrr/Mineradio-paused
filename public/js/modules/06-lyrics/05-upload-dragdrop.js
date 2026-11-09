@@ -28,6 +28,14 @@ function localSongFromAudioFile(file) {
   var rel = String(file.webkitRelativePath || file.name || '');
   var filename = String(file.name || rel || '本地音乐');
   var title = filename.replace(/\.[^.]+$/, '');
+  var diskPath = '';
+  try {
+    if (window.desktopWindow && typeof window.desktopWindow.getPathForFile === 'function') {
+      diskPath = String(window.desktopWindow.getPathForFile(file) || '');
+    }
+  } catch (e) {
+    console.warn('[LocalImport] getPathForFile failed:', e);
+  }
   return hydrateCustomCover({
     type: 'local',
     source: 'local',
@@ -38,6 +46,7 @@ function localSongFromAudioFile(file) {
     localKey: [rel || filename, file.size || 0, file.lastModified || 0].join(':'),
     localUrl: URL.createObjectURL(file),
     localPath: rel,
+    localDiskPath: diskPath,
     duration: 0
   });
 }

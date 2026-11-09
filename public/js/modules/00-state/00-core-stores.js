@@ -126,8 +126,7 @@ var PLAYBACK_QUALITY_OPTIONS = {
     { key: 'standard', title: '128k MP3', sub: '兼容优先' }
   ],
   kugou: [
-    { key: 'hires', title: 'Hi-Res / 臻品', sub: '酷狗高解析 / 优先尝试' },
-    { key: 'lossless', title: '无损 FLAC', sub: '酷狗 SQ / 稳定优先' },
+    { key: 'lossless', title: '无损 FLAC', sub: '酷狗概念版最高音质' },
     { key: 'exhigh', title: '320k MP3', sub: '酷狗高品质' },
     { key: 'standard', title: '128k MP3', sub: '兼容优先' }
   ],

@@ -1,4 +1,8 @@
 var startupLoginGuideShown = false;
+var startupLoginGuideTimer = 0;
+function cancelStartupLoginGuide() {
+  if (startupLoginGuideTimer) { clearTimeout(startupLoginGuideTimer); startupLoginGuideTimer = 0; }
+}
 var loginGuideAnimating = false;
 var loginGuideRaf = null;
 function runLoginGuideParticles(done) {
@@ -116,8 +120,12 @@ function maybeRunStartupLoginGuide(source) {
   var userModal = document.getElementById('user-modal');
   if ((loginModal && loginModal.classList.contains('show')) || (userModal && userModal.classList.contains('show'))) return;
   startupLoginGuideShown = true;
-  setTimeout(function () {
+  startupLoginGuideTimer = setTimeout(function () {
+    startupLoginGuideTimer = 0;
     if (loginStatus.loggedIn || playing || immersiveMode || document.body.classList.contains('splash-active')) return;
+    var loginModal = document.getElementById('login-modal');
+    var userModal = document.getElementById('user-modal');
+    if ((loginModal && loginModal.classList.contains('show')) || (userModal && userModal.classList.contains('show'))) return;
     runLoginGuideParticles(function () { showLoginModal({ guided: true, source: source || 'startup' }); });
   }, source === 'splash' ? 6200 : 2600);
 }
