@@ -1416,6 +1416,7 @@ async function toggleLikeSong(song) {
     });
     if (r && (r.error || r.success === false)) throw new Error(r.error || r.message || 'LIKE_FAILED');
     likedSongMap[stateKey] = r && r.liked != null ? !!r.liked : next;
+    if (likedSongMap[stateKey] && typeof reportMusicProfileFavorite === 'function') reportMusicProfileFavorite(song);
     showToast(next ? '已加入红心喜欢' : '已取消红心');
   } catch (err) {
     likedSongMap[stateKey] = !next;

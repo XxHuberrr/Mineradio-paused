@@ -5667,6 +5667,16 @@ body.home-controls-locked #bottom-bar {
   animation: play-mode-pop .42s cubic-bezier(.16, 1, .3, 1)
 }
 
+#recommendation-mode-btn[aria-pressed="true"] {
+  color: rgba(210, 244, 241, .96);
+  text-shadow: 0 0 14px rgba(0, 245, 212, .34)
+}
+
+#recommendation-mode-btn:disabled {
+  cursor: not-allowed;
+  opacity: .38
+}
+
 #cuefield-automix-btn.cuefield-automix-on {
   color: rgba(255, 221, 150, .98);
   text-shadow: 0 0 14px rgba(255, 191, 100, .42)
@@ -17657,6 +17667,98 @@ body.panel-reordering .mini-queue-item.is-reordering {
 
 #empty-home .home-listen-card {
   padding: 18px 20px
+}
+
+#empty-home .home-music-profile-card {
+  min-height: 116px;
+  padding: 17px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px
+}
+
+#empty-home .home-music-profile-copy {
+  min-width: 0;
+  display: grid;
+  gap: 7px
+}
+
+#empty-home .home-music-profile-copy strong {
+  color: rgba(255, 255, 255, .92);
+  font-size: 13px;
+  line-height: 1.45
+}
+
+#empty-home .home-music-profile-copy p,
+#empty-home .home-music-profile-empty {
+  color: rgba(255, 255, 255, .46);
+  font-size: 10px;
+  line-height: 1.5
+}
+
+#empty-home .home-music-profile-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px
+}
+
+#empty-home .home-music-profile-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid rgba(var(--fc-accent-rgb), .18);
+  border-radius: 999px;
+  color: rgba(228, 255, 249, .82);
+  background: rgba(var(--fc-accent-rgb), .08);
+  font-size: 10px
+}
+
+#empty-home .home-music-profile-tag-negative {
+  border-color: rgba(255, 255, 255, .16);
+  color: rgba(255, 226, 214, .78);
+  background: rgba(255, 255, 255, .055)
+}
+
+#empty-home .home-music-profile-tag button,
+#empty-home .home-music-profile-action,
+#empty-home .home-music-profile-clear {
+  border: 0;
+  color: rgba(235, 255, 250, .92);
+  font: 700 10px var(--font-sans);
+  cursor: pointer
+}
+
+#empty-home .home-music-profile-tag button {
+  padding: 0;
+  background: transparent;
+  color: rgba(var(--fc-accent-rgb), .92)
+}
+
+#empty-home .home-music-profile-action {
+  flex: 0 0 auto;
+  padding: 9px 11px;
+  border: 1px solid rgba(var(--fc-accent-rgb), .42);
+  border-radius: 10px;
+  background: rgba(var(--fc-accent-rgb), .16)
+}
+
+#empty-home .home-music-profile-clear {
+  flex: 0 0 auto;
+  padding: 5px 0;
+  background: transparent;
+  color: rgba(255, 255, 255, .45)
+}
+
+#empty-home .home-music-profile-card button:hover {
+  color: #fff
+}
+
+#empty-home .home-music-profile-card button:focus-visible,
+#recommendation-mode-btn:focus-visible {
+  outline: 2px solid rgba(var(--fc-accent-rgb), .92);
+  outline-offset: 3px
 }
 
 #empty-home .home-insight-head {

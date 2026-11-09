@@ -629,6 +629,7 @@ function nextTrack(userInitiated) {
   if (!playQueue.length) return;
   playToggleBusy = false;
   forcePlaybackControlsInteractive();
+  if (userInitiated && typeof finalizeListenSession === 'function') finalizeListenSession(false, true);
   if (currentIdx >= playQueue.length - 1 && queueHydrationState && queueHydrationState.queueRef === playQueue && (queueHydrationState.active || queueHydrationState.loading) && !queueHydrationState.error) {
     var previousTail = currentIdx;
     Promise.resolve(hydratePlaylistQueueNextPage('queue-tail')).then(function () {
@@ -749,4 +750,46 @@ function cyclePlayMode() {
   updatePlayModeButton(true);
   showToast('播放模式: ' + playModeLabel(playMode));
 }
+
+function syncMusicProfileRecommendationControls(profile) {
+  var button = document.getElementById('recommendation-mode-btn');
+  if (!button) return;
+  profile = profile || musicProfileView || {};
+  var available = profile.enabled === true && profile.ready === true;
+  var active = available && profile.recommendationMode === true;
+  button.disabled = !available;
+  button.classList.toggle('active', active);
+  button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  button.setAttribute('aria-label', active ? '关闭音乐画像推荐模式' : '开启音乐画像推荐模式');
+  button.title = !profile.enabled ? '先启用音乐画像' : (!profile.ready ? '音乐画像学习中' : (active ? '关闭画像推荐模式' : '开启画像推荐模式'));
+}
+
+function toggleMusicProfileRecommendationMode() {
+  var profile = musicProfileView || {};
+  if (profile.enabled !== true || profile.ready !== true || typeof setMusicProfileRecommendationMode !== 'function') {
+    showToast(profile.enabled ? '音乐画像还在学习中' : '请先在首页启用音乐画像');
+    return Promise.resolve(null);
+  }
+  return Promise.resolve(setMusicProfileRecommendationMode(!profile.recommendationMode)).then(function (nextProfile) {
+    syncMusicProfileRecommendationControls(nextProfile || musicProfileView);
+    if (nextProfile && nextProfile.enabled && nextProfile.ready && nextProfile.recommendationMode && typeof applyMusicProfileQueueOrder === 'function') {
+      applyMusicProfileQueueOrder('profile-enabled');
+    }
+    return nextProfile;
+  });
+}
+
+function bindMusicProfileRecommendationControl() {
+  var button = document.getElementById('recommendation-mode-btn');
+  if (!button || button.dataset.musicProfileBound === 'true') return;
+  button.dataset.musicProfileBound = 'true';
+  button.addEventListener('click', toggleMusicProfileRecommendationMode);
+}
+
+window.addEventListener('mineradio-music-profile-change', function (event) {
+  syncMusicProfileRecommendationControls(event.detail || musicProfileView);
+});
+
+bindMusicProfileRecommendationControl();
+syncMusicProfileRecommendationControls(musicProfileView);
 updatePlayModeButton(false);

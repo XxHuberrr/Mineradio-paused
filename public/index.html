@@ -225,6 +225,8 @@
               </div>
             </section>
 
+            <section id="home-music-profile" class="home-insight-card home-music-profile-card" aria-live="polite"></section>
+
             <button id="home-next-card" class="home-insight-card home-next-card" type="button"
               onclick="playHomeNextFromDock()" aria-label="播放下一首">
               <span id="home-next-cover" class="home-next-cover" aria-hidden="true"></span>
@@ -1357,6 +1359,13 @@
               <path d="M7 22l-4-4 4-4" />
               <path d="M21 13v2a4 4 0 0 1-4 4H3" />
             </svg></button>
+          <button id="recommendation-mode-btn" class="ctrl-btn" type="button" aria-pressed="false"
+            title="先启用音乐画像" aria-label="开启音乐画像推荐模式">
+            <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h10M4 12h16M4 18h7" />
+              <path d="m16 4 4 2-4 2zM13 16l4 2-4 2z" />
+            </svg>
+          </button>
           <button id="cuefield-automix-btn" class="ctrl-btn" onclick="toggleCuefieldAutoMix()"
             title="Cuefield AutoMix（实验功能，默认关闭）" aria-pressed="false">
             <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">

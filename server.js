@@ -117,6 +117,7 @@ const {
   readCuefieldFeedbackStats,
 } = require('./cuefield/feedback-log');
 const { planCuefieldTransitionFromCache } = require('./cuefield/mineradio-bridge');
+const musicProfile = require('./music-profile');
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -141,6 +142,7 @@ const BEATMAP_CACHE_DIR = process.env.MINERADIO_BEAT_CACHE_DIR || 'D:\\Mineradio
 const CUEFIELD_FEEDBACK_FILE = process.env.CUEFIELD_FEEDBACK_FILE || path.join(__dirname, 'data', 'cuefield-feedback.jsonl');
 const LISTEN_SYNC_JOURNAL_FILE = process.env.MINERADIO_LISTEN_SYNC_FILE || path.join(__dirname, 'data', 'listen-sync-journal.json');
 const LISTEN_SYNC_JOURNAL_LIMIT = 600;
+const MUSIC_PROFILE_FILE = process.env.MINERADIO_MUSIC_PROFILE_FILE || path.join(__dirname, 'data', 'music-profile.json');
 const APP_PACKAGE = readPackageInfo();
 const APP_VERSION = process.env.MINERADIO_VERSION || APP_PACKAGE.version || '2.2.0';
 const UPDATE_CONFIG = readUpdateConfig(APP_PACKAGE);
@@ -174,6 +176,76 @@ function loadListenSyncJournal() {
 }
 
 let listenSyncJournal = loadListenSyncJournal();
+let musicProfileState = musicProfile.loadMusicProfile(MUSIC_PROFILE_FILE);
+
+function copyMusicProfileState() {
+  return JSON.parse(JSON.stringify(musicProfileState));
+}
+
+function persistMusicProfile(nextState) {
+  musicProfile.saveMusicProfile(MUSIC_PROFILE_FILE, nextState);
+}
+
+function musicProfileView() {
+  return musicProfile.getMusicProfileView(musicProfileState, Date.now());
+}
+
+function hasOnlyMusicProfileFields(value, fields) {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).every((key) => fields.includes(key));
+}
+
+function validMusicProfileSong(song) {
+  if (!hasOnlyMusicProfileFields(song, ['provider', 'id', 'type', 'releaseDate', 'profileMetadata'])) return null;
+  const provider = typeof song.provider === 'string' ? song.provider.trim() : '';
+  const id = typeof song.id === 'string' || typeof song.id === 'number' ? String(song.id).trim() : '';
+  const type = typeof song.type === 'string' ? song.type.trim().toLowerCase() : '';
+  if (!provider || provider.length > 40 || !id || id.length > 160 || !type || type.length > 24) return null;
+  const result = { provider, id, type };
+  if (song.releaseDate !== undefined) {
+    if (typeof song.releaseDate !== 'string' || song.releaseDate.length > 16) return null;
+    result.releaseDate = song.releaseDate;
+  }
+  if (song.profileMetadata !== undefined) {
+    const metadata = song.profileMetadata;
+    if (!hasOnlyMusicProfileFields(metadata, ['styles', 'languages', 'releaseDate', 'isDj'])) return null;
+    for (const field of ['styles', 'languages']) {
+      if (metadata[field] === undefined) continue;
+      if (!Array.isArray(metadata[field]) || metadata[field].length > 20
+        || metadata[field].some((item) => typeof item !== 'string' || !item.trim() || item.length > 80)) return null;
+    }
+    if (metadata.releaseDate !== undefined
+      && (typeof metadata.releaseDate !== 'string' || metadata.releaseDate.length > 16)) return null;
+    if (metadata.isDj !== undefined && typeof metadata.isDj !== 'boolean') return null;
+    result.profileMetadata = metadata;
+  }
+  return result;
+}
+
+function validMusicProfileEvent(body) {
+  if (!hasOnlyMusicProfileFields(body, ['id', 'kind', 'progress', 'at', 'song'])) return null;
+  const id = typeof body.id === 'string' ? body.id.trim() : '';
+  const kind = typeof body.kind === 'string' ? body.kind : '';
+  const progress = Number(body.progress);
+  const at = Number(body.at);
+  const song = validMusicProfileSong(body.song);
+  if (!id || id.length > 160 || !['favorite', 'listen', 'skip', 'early-skip'].includes(kind)
+    || !Number.isFinite(progress) || progress < 0 || progress > 1
+    || !Number.isFinite(at) || at < 0 || at > Date.now() + 5 * 60 * 1000 || !song) return null;
+  return { id, kind, progress, at, song };
+}
+
+function validMusicProfileTagKey(key) {
+  return typeof key === 'string' && key.length <= 120 && /^(style|language|era):[^\s:][^:]*$/.test(key);
+}
+
+function sendMusicProfile(res, status = 200) {
+  sendJSON(res, { ok: true, profile: musicProfileView() }, status);
+}
+
+function sendMusicProfileError(res, error, status) {
+  sendJSON(res, { ok: false, error }, status);
+}
 
 function listenSyncAccountKey(provider, credential) {
   return String(provider || '') + ':' + crypto.createHash('sha256').update(String(credential || '')).digest('hex').slice(0, 16);
@@ -1259,6 +1331,14 @@ function mapSongRecord(s) {
   s = s || {};
   const artists = mapArtists(s.ar || s.artists);
   const album = s.al || s.album || {};
+  const publishTime = album.publishTime;
+  const releaseDate = typeof publishTime === 'number'
+    && Number.isSafeInteger(publishTime)
+    && Math.abs(publishTime) >= 100000000000
+    && publishTime >= Date.UTC(1900, 0, 1)
+    && publishTime <= Date.UTC(new Date().getUTCFullYear() + 1, 11, 31, 23, 59, 59, 999)
+    ? new Date(publishTime).toISOString().slice(0, 10)
+    : '';
   return {
     provider: 'netease',
     source: 'netease',
@@ -1271,6 +1351,7 @@ function mapSongRecord(s) {
     album: album.name || '',
     albumId: album.id || '',
     cover: album.picUrl || album.coverUrl || '',
+    ...(releaseDate ? { releaseDate } : {}),
     duration: s.dt || s.duration || 0,
     popularity: Number(s.pop || s.popularity || s.score || s.hotScore || 0) || 0,
     searchRank: s.rank === null || s.rank === undefined || s.rank === '' ? null : Number(s.rank),
@@ -4693,6 +4774,80 @@ const server = http.createServer(async (req, res) => {
         recentPlayReport: qishuiCookieHasLogin(qishuiCookie), listenReport: false,
       },
     });
+    return;
+  }
+
+  if (pn === '/api/music-profile') {
+    if (req.method !== 'GET') {
+      sendMusicProfileError(res, 'METHOD_NOT_ALLOWED', 405);
+      return;
+    }
+    sendMusicProfile(res);
+    return;
+  }
+
+  if (pn === '/api/music-profile/enable'
+    || pn === '/api/music-profile/recommendation-mode'
+    || pn === '/api/music-profile/clear'
+    || pn === '/api/music-profile/tag-preference'
+    || pn === '/api/music-profile/event') {
+    if (req.method !== 'POST') {
+      sendMusicProfileError(res, 'METHOD_NOT_ALLOWED', 405);
+      return;
+    }
+    try {
+      const body = await readRequestBody(req);
+      const nextState = copyMusicProfileState();
+      let changed = false;
+
+      if (pn === '/api/music-profile/enable') {
+        if (!hasOnlyMusicProfileFields(body, ['enabled']) || typeof body.enabled !== 'boolean') {
+          sendMusicProfileError(res, 'INVALID_MUSIC_PROFILE_ENABLE', 400);
+          return;
+        }
+        musicProfile.setMusicProfileEnabled(nextState, body.enabled);
+        changed = true;
+      } else if (pn === '/api/music-profile/recommendation-mode') {
+        if (!hasOnlyMusicProfileFields(body, ['enabled']) || typeof body.enabled !== 'boolean') {
+          sendMusicProfileError(res, 'INVALID_MUSIC_PROFILE_RECOMMENDATION_MODE', 400);
+          return;
+        }
+        musicProfile.setMusicProfileRecommendationMode(nextState, body.enabled);
+        changed = true;
+      } else if (pn === '/api/music-profile/clear') {
+        if (!hasOnlyMusicProfileFields(body, [])) {
+          sendMusicProfileError(res, 'INVALID_MUSIC_PROFILE_CLEAR', 400);
+          return;
+        }
+        Object.assign(nextState, musicProfile.clearMusicProfile(nextState));
+        changed = true;
+      } else if (pn === '/api/music-profile/tag-preference') {
+        if (!hasOnlyMusicProfileFields(body, ['key', 'reduced']) || !validMusicProfileTagKey(body.key)
+          || typeof body.reduced !== 'boolean') {
+          sendMusicProfileError(res, 'INVALID_MUSIC_PROFILE_TAG_PREFERENCE', 400);
+          return;
+        }
+        musicProfile.setMusicProfileTagReduced(nextState, body.key, body.reduced);
+        changed = true;
+      } else {
+        const event = validMusicProfileEvent(body);
+        if (!event) {
+          sendMusicProfileError(res, 'INVALID_MUSIC_PROFILE_EVENT', 400);
+          return;
+        }
+        changed = musicProfile.applyMusicProfileEvent(nextState, event);
+      }
+
+      if (changed) {
+        persistMusicProfile(nextState);
+        musicProfileState = nextState;
+      }
+      sendMusicProfile(res);
+    } catch (err) {
+      console.error('[MusicProfile]', err);
+      sendMusicProfileError(res, err && err.code === 'MUSIC_PROFILE_PERSIST_FAILED'
+        ? err.code : 'MUSIC_PROFILE_PERSIST_FAILED', 500);
+    }
     return;
   }
 

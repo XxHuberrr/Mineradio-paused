@@ -72,6 +72,7 @@ function moveQueueIndex(fromIdx, toIdx, opts) {
   if (fromIdx === toIdx) return false;
   var currentSong = currentIdx >= 0 && currentIdx < playQueue.length ? playQueue[currentIdx] : null;
   var item = playQueue.splice(fromIdx, 1)[0];
+  item.__musicProfileManualOrder = true;
   playQueue.splice(toIdx, 0, item);
   if (currentSong) {
     var nextCurrentIdx = playQueue.indexOf(currentSong);

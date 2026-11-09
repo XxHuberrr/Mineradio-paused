@@ -180,6 +180,8 @@ function listenSongSnapshot(song) {
     provider: song.provider || song.source || song.type || '',
     resolvedPlaybackProvider: song.resolvedPlaybackProvider || song.playbackProvider || song.audioProvider || song.providerResolved || '',
     duration: Number(song.duration) || 0,
+    releaseDate: typeof song.releaseDate === 'string' ? song.releaseDate : '',
+    profileMetadata: song.profileMetadata && typeof song.profileMetadata === 'object' ? song.profileMetadata : null,
   };
 }
 function beginListenSession(song, context) {
@@ -221,7 +223,7 @@ function updateListenStatsTick(force) {
   if (!listenSession) return;
   tickListenSessionSnapshot(listenSession, force);
 }
-function finalizeListenSession(completed) {
+function finalizeListenSession(completed, userSkip) {
   if (!listenSession) return;
   var session = listenSession;
   tickListenSessionSnapshot(session, true);
@@ -230,6 +232,10 @@ function finalizeListenSession(completed) {
     : listenSnapshotDurationMs(session.song);
   listenSession = null;
   var effective = completed || session.listenMs >= 45000 || session.maxProgress >= 0.5 || (!audio || !audio.duration ? session.listenMs >= 30000 : false);
+  var profileEarlySkip = userSkip === true && session.maxProgress <= 0.15;
+  if ((effective || profileEarlySkip) && typeof reportMusicProfileSession === 'function') {
+    reportMusicProfileSession(session, completed, userSkip === true);
+  }
   if (!effective) return;
   var now = Date.now();
   var snap = session.song || {};

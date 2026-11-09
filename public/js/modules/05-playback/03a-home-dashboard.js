@@ -1264,10 +1264,98 @@ function scheduleHomeDashboardRefresh() {
   }, 15000);
 }
 
+function homeMusicProfileTagLabel(tag) {
+  if (!tag) return '';
+  var labels = { style: '曲风', language: '语言', era: '年代' };
+  return (labels[tag.dimension] || tag.dimension || '标签') + ' · ' + (tag.value || '未知');
+}
+
+function homeMusicProfileEvidenceCount(tag) {
+  return Math.max(0, Number(tag && tag.evidenceSongs) || 0);
+}
+
+function homeMusicProfileRecoveryReason(profile, tags) {
+  var recovered = Array.isArray(profile && profile.recoveredTags) ? profile.recoveredTags : [];
+  if (!recovered.length) return '';
+  return recovered.map(function (item) {
+    var tag = tags.find(function (candidate) { return candidate && candidate.key === item.key; });
+    var label = tag ? homeMusicProfileTagLabel(tag) : String(item.key || '该标签');
+    var evidence = Math.max(5, Number(item.evidenceSongs) || 0);
+    return label + ' 已恢复：' + evidence + ' 首不同歌曲的正向行为达到恢复条件。';
+  }).join(' ');
+}
+
+function renderHomeMusicProfileCard(profile) {
+  var root = document.getElementById('home-music-profile');
+  if (!root) return;
+  profile = profile || musicProfileView || { enabled: false, ready: false, tags: [] };
+  if (!profile.enabled) {
+    root.innerHTML = '<div class="home-music-profile-copy"><span class="home-insight-kicker">MUSIC PROFILE · 音乐画像</span><strong>让推荐从你的真实收听开始</strong><p>只分析你在 Mineradio 的播放、切歌和收藏，不会修改你的歌单。</p></div><button class="home-music-profile-action" type="button" data-music-profile-action="enable">启用画像</button>';
+    return;
+  }
+  if (!profile.ready) {
+    root.innerHTML = '<div class="home-music-profile-copy"><span class="home-insight-kicker">MUSIC PROFILE · 学习中</span><strong>还需 ' + Math.max(0, Number(profile.remainingSongs) || 0) + ' 首不同歌曲</strong><p>达到五首有有效偏好的歌曲后，推荐模式才会开放。</p></div>';
+    return;
+  }
+  var tags = Array.isArray(profile.tags) ? profile.tags : [];
+  var dimensions = { style: false, language: false, era: false };
+  tags.forEach(function (tag) { if (tag && dimensions.hasOwnProperty(tag.dimension)) dimensions[tag.dimension] = true; });
+  var missing = Object.keys(dimensions).filter(function (key) { return !dimensions[key]; }).map(function (key) {
+    return { style: '曲风', language: '语言', era: '年代' }[key];
+  });
+  var positiveTags = tags.filter(function (tag) { return Number(tag && tag.weight) > 0; });
+  var negativeTags = tags.filter(function (tag) { return Number(tag && tag.weight) < 0; });
+  var tagHtml = tags.map(function (tag) {
+    var negative = Number(tag && tag.weight) < 0;
+    var label = homeMusicProfileTagLabel(tag);
+    var button = negative ? '' : '<button type="button" data-music-profile-action="reduce-tag" data-music-profile-tag="' + escHtml(tag.key || '') + '" aria-label="减少' + escHtml(label) + '推荐">减少</button>';
+    return '<span class="home-music-profile-tag' + (negative ? ' home-music-profile-tag-negative' : '') + '">' + (negative ? '少放 ' : '') + escHtml(label) + '<small>' + (negative ? '负向证据 ' : '证据 ') + homeMusicProfileEvidenceCount(tag) + ' 首</small>' + button + '</span>';
+  }).join('');
+  var status = '';
+  var reason = '画像已准备好：可在播放器中开启推荐模式。';
+  if (!tags.length) {
+    reason = '画像已准备，但还没有可用于排序的标签；继续收听后再调整队列。';
+  } else if (profile.recommendationMode && positiveTags.length) {
+    status = ' data-music-profile-status="queue-adjusting"';
+    reason = '推荐模式已开启：从当前曲目后的第六首起，优先排列匹配正向标签的歌曲。';
+  } else if (profile.recommendationMode && negativeTags.length) {
+    status = ' data-music-profile-status="queue-deprioritizing"';
+    reason = '推荐模式已开启：匹配负向标签的歌曲会被排得更靠后。';
+  }
+  reason = homeMusicProfileRecoveryReason(profile, tags) || reason;
+  root.innerHTML = '<div class="home-music-profile-copy"' + status + '><span class="home-insight-kicker">MUSIC PROFILE · ' + (profile.recommendationMode ? '推荐中' : '画像已就绪') + '</span><strong>' + escHtml(reason) + '</strong><div class="home-music-profile-tags">' + (tagHtml || '<span class="home-music-profile-empty">标签资料不足，暂不猜测。</span>') + '</div>' + (missing.length ? '<p>资料不足：' + escHtml(missing.join('、')) + '。</p>' : '') + '</div><button class="home-music-profile-action" type="button" data-music-profile-action="recommendation-mode" aria-pressed="' + (profile.recommendationMode ? 'true' : 'false') + '">' + (profile.recommendationMode ? '关闭推荐' : '开启推荐') + '</button><button class="home-music-profile-clear" type="button" data-music-profile-action="clear">清除画像</button>';
+}
+
+function bindHomeMusicProfileCard() {
+  var root = document.getElementById('home-music-profile');
+  if (!root || root.dataset.musicProfileBound === 'true') return;
+  root.dataset.musicProfileBound = 'true';
+  root.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-music-profile-action]');
+    if (!button || !root.contains(button)) return;
+    var action = button.getAttribute('data-music-profile-action');
+    if (action === 'enable' && typeof setMusicProfileEnabled === 'function') {
+      Promise.resolve(setMusicProfileEnabled(true)).then(function (profile) { renderHomeMusicProfileCard(profile); });
+    } else if (action === 'recommendation-mode' && typeof setMusicProfileRecommendationMode === 'function') {
+      var profileView = musicProfileView || {};
+      if (profileView.enabled === true && profileView.ready === true) {
+        Promise.resolve(setMusicProfileRecommendationMode(!profileView.recommendationMode)).then(function (profile) { renderHomeMusicProfileCard(profile); });
+      }
+    } else if (action === 'reduce-tag' && typeof setMusicProfileTagReduced === 'function') {
+      var key = button.getAttribute('data-music-profile-tag');
+      if (key) Promise.resolve(setMusicProfileTagReduced(key, true)).then(function (profile) { renderHomeMusicProfileCard(profile); });
+    } else if (action === 'clear' && typeof clearMusicProfile === 'function' && window.confirm('清除后将删除本机音乐画像和推荐偏好，是否继续？')) {
+      Promise.resolve(clearMusicProfile()).then(function (profile) { renderHomeMusicProfileCard(profile); });
+    }
+  });
+}
+
 function renderHomeDashboard() {
   renderHomeDashboardHero();
   renderHomeDashboardQuickCards();
   renderHomeInsightDock();
+  renderHomeMusicProfileCard(musicProfileView);
+  bindHomeMusicProfileCard();
   scheduleHomeDashboardRefresh();
 }
 
@@ -1284,6 +1372,10 @@ document.addEventListener('visibilitychange', function () {
   if (!document.hidden && emptyHomeActive) renderHomeDashboard();
   else scheduleHomeDashboardRefresh();
   homeDashboardUpdateVideoPower();
+});
+
+window.addEventListener('mineradio-music-profile-change', function (event) {
+  renderHomeMusicProfileCard(event.detail || musicProfileView);
 });
 
 bindHomeDashboardVideoControls();
